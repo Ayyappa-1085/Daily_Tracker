@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --base-950: 15 14 13;
+  --base-900: 22 21 19;
+  --base-800: 29 28 26;
+  --base-700: 42 40 37;
+  --base-600: 64 61 56;
+
+  --ink-50: 245 244 240;
+  --ink-200: 209 207 199;
+  --ink-400: 154 151 143;
+  --ink-500: 113 111 104;
+
+  --accent-primary: 245 244 240;
+  --accent-green: 124 144 112;
+  --accent-blue: 123 147 168;
+  --accent-amber: 182 156 107;
+  --accent-gold: 198 168 110;
+  --accent-sky: 122 168 178;
+  --accent-purple: 145 138 163;
+  --accent-red: 196 92 82;
+}
+
+html.light-theme {
+  --base-950: 250 249 246;
+  --base-900: 255 255 255;
+  --base-800: 247 246 242;
+  --base-700: 231 229 222;
+  --base-600: 214 211 202;
+
+  --ink-50: 23 22 20;
+  --ink-200: 59 57 52;
+  --ink-400: 110 107 100;
+  --ink-500: 143 140 132;
+
+  --accent-primary: 23 22 20;
+  --accent-green: 90 122 84;
+  --accent-blue: 90 116 140;
+  --accent-amber: 154 122 71;
+  --accent-gold: 168 138 82;
+  --accent-sky: 84 132 140;
+  --accent-purple: 122 108 143;
+  --accent-red: 166 74 64;
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: dark;
+}
+
+html.light-theme {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-base-950 text-ink-200 font-sans antialiased;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+img,
+svg {
+  display: block;
+}
+
+::selection {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+html.light-theme ::selection {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 120, 120, 0.2) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 120, 0.2);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 120, 120, 0.4);
+}
+
+.card {
+  @apply rounded-[24px] border border-base-700 bg-base-900 p-6 transition-all duration-200;
+}
+
+.focus-ring {
+  @apply outline-none
+  focus-visible:ring-2
+  focus-visible:ring-ink-200/40
+  focus-visible:ring-offset-2
+  focus-visible:ring-offset-base-950;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
