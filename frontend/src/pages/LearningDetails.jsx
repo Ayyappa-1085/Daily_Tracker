@@ -46,7 +46,6 @@ export default function LearningDetails() {
         current: false,
       }));
 
-      // Optional: automatically open the next question
       if (data.nextQuestion) {
         navigate(`/learning/${data.nextQuestion}`);
       }
@@ -58,12 +57,14 @@ export default function LearningDetails() {
   useEffect(() => {
     if (!question || !isDirty) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
+
     saveTimer.current = setTimeout(async () => {
       try {
         await api.patch(`/learning/question-notes/${id}`, {
           approach: draftApproach,
           notes: draftNotes,
         });
+
         setSaveStatus("Saved");
         setSaveError(null);
         setIsDirty(false);
@@ -72,22 +73,26 @@ export default function LearningDetails() {
         setSaveError(err.response?.data?.message || err.message);
       }
     }, 1000);
+
     return () => clearTimeout(saveTimer.current);
   }, [draftApproach, draftNotes, id, isDirty, question]);
 
   if (loading)
     return (
-      <div className="px-6 py-8 text-sm text-ink-400">Loading question...</div>
+      <div className="px-4 py-6 text-sm text-ink-400 sm:px-6 sm:py-8">
+        Loading question...
+      </div>
     );
 
   if (!question)
     return (
-      <div className="px-6 py-8 text-sm text-ink-400">Question not found.</div>
+      <div className="px-4 py-6 text-sm text-ink-400 sm:px-6 sm:py-8">
+        Question not found.
+      </div>
     );
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8">
-      {/* Back */}
+    <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
       <button
         onClick={() => navigate("/learning")}
         className="mb-6 flex items-center gap-2 text-sm font-medium text-ink-400 transition hover:text-ink-50"
@@ -96,17 +101,15 @@ export default function LearningDetails() {
         Back to Learning
       </button>
 
-      {/* Header */}
       <section>
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-ink-500">
           LeetCode #{question.leetcodeNumber}
         </p>
 
-        <h1 className="mt-1 max-w-4xl text-3xl font-bold leading-tight tracking-tight text-ink-50 md:text-4xl">
+        <h1 className="mt-1 max-w-4xl break-words text-2xl font-bold leading-tight tracking-tight text-ink-50 sm:text-3xl md:text-4xl">
           {question.problemName}
         </h1>
 
-        {/* Meta */}
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-400">
           <span>{question.topic}</span>
 
@@ -119,7 +122,6 @@ export default function LearningDetails() {
           <span>{question.pattern}</span>
         </div>
 
-        {/* Button */}
         <div className="mt-4">
           {question.completed ? (
             <span
@@ -143,7 +145,7 @@ export default function LearningDetails() {
             <button
               onClick={handleMarkCompleted}
               disabled={updating}
-              className="rounded-full bg-ink-50 px-6 py-3 text-sm font-semibold text-base-950 transition hover:opacity-90 disabled:opacity-50"
+              className="w-full rounded-full bg-ink-50 px-6 py-3 text-sm font-semibold text-base-950 transition hover:opacity-90 disabled:opacity-50 sm:w-auto"
             >
               {updating ? "Updating..." : "Mark as Completed"}
             </button>
@@ -153,7 +155,6 @@ export default function LearningDetails() {
 
       <div className="my-6 border-t border-base-800" />
 
-      {/* Approach */}
       <section className="space-y-4">
         <div>
           <h2 className="text-xl font-semibold text-ink-50">Approach</h2>
@@ -176,13 +177,14 @@ export default function LearningDetails() {
           className="w-full resize-none rounded-2xl
 border border-slate-200
 bg-white
-px-5 py-4
+px-4 py-4
 text-sm leading-7
 text-slate-800
 placeholder:text-slate-400
 outline-none transition
 focus:border-slate-400
 focus:ring-2 focus:ring-slate-200
+sm:px-5
 dark:border-base-700/60
 dark:bg-base-900
 dark:text-ink-200
@@ -194,7 +196,6 @@ dark:focus:ring-base-600"
 
       <div className="my-3 border-t border-base-800" />
 
-      {/* Notes */}
       <section className="space-y-4">
         <div>
           <h2 className="text-xl font-semibold text-ink-50">Notes</h2>
@@ -217,13 +218,14 @@ dark:focus:ring-base-600"
           className="w-full resize-none rounded-2xl
 border border-slate-200
 bg-white
-px-5 py-4
+px-4 py-4
 text-sm leading-7
 text-slate-800
 placeholder:text-slate-400
 outline-none transition
 focus:border-slate-400
 focus:ring-2 focus:ring-slate-200
+sm:px-5
 dark:border-base-700/60
 dark:bg-base-900
 dark:text-ink-200
@@ -232,7 +234,7 @@ dark:focus:border-base-600
 dark:focus:ring-base-600"
         />
 
-        <p className="flex items-center gap-2 text-xs text-ink-500">
+        <p className="flex flex-wrap items-center gap-2 text-xs text-ink-500">
           {!saveError && <CheckCircle2 size={13} />}
           {saveError || "Saved automatically"}
         </p>

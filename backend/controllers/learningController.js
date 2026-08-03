@@ -8,16 +8,14 @@ async function getAllQuestions(req, res, next) {
   try {
     const userId = req.user._id;
 
-    const questions = await LeetCodeQuestion.find({
-      isActive: true,
-    }).sort({
-      phase: 1,
-      leetcodeNumber: 1,
-    });
+    const questions = await LeetCodeQuestion.find({ isActive: true })
+      .select("leetcodeNumber problemName topic difficulty pattern estimatedTime xp")
+      .sort({ phase: 1, leetcodeNumber: 1 })
+      .lean();
 
     const progress = await UserLearningProgress.findOne({
       user: userId,
-    });
+    }).lean();
 
     const completedIds = new Set(
       (progress?.completedQuestions || []).map((id) => id.toString()),
@@ -26,7 +24,7 @@ async function getAllQuestions(req, res, next) {
     const currentId = progress?.currentQuestion?.toString();
 
     const result = questions.map((question) => ({
-      ...question.toObject(),
+      ...question,
       completed: completedIds.has(question._id.toString()),
       current: currentId === question._id.toString(),
     }));
@@ -66,7 +64,7 @@ async function getQuestionById(req, res, next) {
     );
 
     res.json({
-      ...question.toObject(),
+      ...question,
       completed,
       current,
       approach: noteEntry?.approach || "",
@@ -113,11 +111,7 @@ async function saveQuestionNotes(req, res, next) {
       notes,
     });
   } catch (err) {
-    console.error("Failed to save learning notes:", err);
-    res.status(500).json({
-      message: "Unable to save notes. Please try again.",
-      error: err.message,
-    });
+    next(err);
   }
 }
 

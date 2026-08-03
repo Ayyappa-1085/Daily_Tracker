@@ -46,8 +46,6 @@ async function seedQuestions() {
     });
 
     await LeetCodeQuestion.insertMany(questions);
-
-    console.log(`Imported ${questions.length} questions.`);
   } catch (err) {
     console.error("Seeding failed:", err);
   } finally {

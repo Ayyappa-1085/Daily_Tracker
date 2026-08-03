@@ -49,15 +49,21 @@ async function getDashboard(req, res, next) {
     const date = req.query.date || todayKey();
     const user = req.user;
 
-    // Make sure a stale streak isn't shown as still-alive.
     syncStreakBreak(user);
-    await user.save();
+    if (user.isModified()) {
+      await user.save();
+    }
+
+    const missionsPromise = ensureTodayMissions(user._id, date);
+    const timelinePromise = ensureTodayTimeline(user._id, date);
+    const insightPromise = generateInsight(user._id);
+    const trendsPromise = getWeeklyTrends(user._id);
 
     const [missions, timelineEvents, insight, trends] = await Promise.all([
-      ensureTodayMissions(user._id, date),
-      ensureTodayTimeline(user._id, date),
-      generateInsight(user._id),
-      getWeeklyTrends(user._id),
+      missionsPromise,
+      timelinePromise,
+      insightPromise,
+      trendsPromise,
     ]);
 
     const nowMinutes = nowMinutesOfDay();

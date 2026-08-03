@@ -34,17 +34,19 @@ export default function Dashboard() {
   if (!data) return null;
 
   return (
-    <div className="px-3 lg:px-4 xl:px-5 pb-8">
+    <div className="px-4 sm:px-5 lg:px-4 xl:px-5 pb-8">
       <Header />
 
       {lastLevelUp && (
         <div className="mt-4 rounded-xl border border-base-700 bg-base-800 px-4 py-3">
-          <div className="flex items-center justify-between">
-            <span className="text-ink-50">Level {lastLevelUp} unlocked</span>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span className="break-words text-ink-50">
+              Level {lastLevelUp} unlocked
+            </span>
 
             <button
               onClick={clearLevelUp}
-              className="text-ink-400 hover:text-ink-50"
+              className="w-full rounded-lg py-2 text-left text-ink-400 transition-colors hover:text-ink-50 sm:w-auto sm:py-0 sm:text-right"
             >
               Dismiss
             </button>
@@ -59,7 +61,7 @@ export default function Dashboard() {
 
         {/* Overall Progress + Continue Learning, side by side */}
 
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <OverallProgressCard progress={data.overallProgress} />
 
           <ContinueLearningCard question={data.continueLearning} />

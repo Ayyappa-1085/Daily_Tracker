@@ -35,7 +35,7 @@ export default function Progress() {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-base-700 bg-base-900 p-6 text-center">
+      <div className="rounded-2xl border border-base-700 bg-base-900 p-4 text-center sm:p-6">
         <h2 className="text-lg font-semibold text-ink-50">
           Unable to load progress
         </h2>
@@ -55,10 +55,10 @@ export default function Progress() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
       <ProgressHeader />
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <LevelCard user={user} />
         <XPCard user={user} />
         <StreakCard user={user} />
@@ -68,12 +68,12 @@ export default function Progress() {
 
       <MonthlyHeatmap monthly={monthly} />
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <StatsCard stats={stats} />
         <RewardsCard user={user} />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <AchievementsCard
           user={user}
           stats={stats}

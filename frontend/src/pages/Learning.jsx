@@ -1,38 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
-import api from "../api/axios";
+import { useLearningStore } from "../store/useLearningStore";
 import LearningHeader from "../components/learning/LearningHeader";
 import LearningTable from "../components/learning/LearningTable";
 
 export default function Learning() {
-  const [questions, setQuestions] = useState([]);
-  const [progress, setProgress] = useState({
-    progress: 0,
-    completed: 0,
-    total: 0,
-  });
+  const {
+    questions,
+    progress,
+    status,
+    error,
+    fetchLearning,
+  } = useLearningStore();
 
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [topic, setTopic] = useState("");
   const [difficulty, setDifficulty] = useState("");
 
   useEffect(() => {
-    async function loadQuestions() {
-      try {
-        const { data } = await api.get("/learning/questions");
-        setQuestions(data);
+    fetchLearning();
+  }, [fetchLearning]);
 
-        const { data: progressData } = await api.get("/learning/progress");
-        setProgress(progressData);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadQuestions();
-  }, []);
+  const loading = status === "loading" && questions.length === 0;
 
   const topics = useMemo(() => {
     return [...new Set(questions.map((q) => q.topic))].filter(Boolean);
@@ -59,16 +47,26 @@ export default function Learning() {
 
   if (loading) {
     return (
-      <div className="mx-auto flex min-h-[60vh] w-full max-w-7xl items-center justify-center px-6 py-8">
-        <p className="text-sm font-medium tracking-wide text-ink-400">
+      <div className="mx-auto flex min-h-[60vh] w-full max-w-7xl items-center justify-center px-4 py-8 sm:px-6">
+        <p className="text-center text-sm font-medium tracking-wide text-ink-400">
           Loading Learning Roadmap...
         </p>
       </div>
     );
   }
 
+  if (!Array.isArray(questions) || (!questions.length && error)) {
+    return (
+      <div className="mx-auto flex min-h-[60vh] w-full max-w-7xl items-center justify-center px-4 py-8 sm:px-6">
+        <p className="text-center text-sm font-medium tracking-wide text-ink-400">
+          Unable to load the learning roadmap right now.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 transition-all duration-300 lg:px-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-4 transition-all duration-300 sm:gap-6 sm:px-6 sm:py-6 lg:px-8">
       <LearningHeader
         progress={progress}
         search={search}

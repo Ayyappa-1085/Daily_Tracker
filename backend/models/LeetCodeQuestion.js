@@ -55,4 +55,6 @@ const leetCodeQuestionSchema = new mongoose.Schema(
   },
 );
 
+leetCodeQuestionSchema.index({ isActive: 1, phase: 1, leetcodeNumber: 1 });
+
 module.exports = mongoose.model("LeetCodeQuestion", leetCodeQuestionSchema);

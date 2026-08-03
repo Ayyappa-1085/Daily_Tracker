@@ -45,6 +45,14 @@ export default function Today() {
 
   if (!data) return null;
 
+  if (!Array.isArray(data.missions)) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center px-4 text-center text-sm text-black/60 dark:text-white/60">
+        Unable to load today’s missions right now.
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 pb-20 pt-8 sm:px-6 md:gap-8 md:pt-12">
       {/* Compact Header */}
@@ -59,7 +67,7 @@ export default function Today() {
           </span>
         </div>
 
-        <div className="flex items-baseline gap-3">
+        <div className="flex flex-wrap items-baseline gap-2 sm:gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-black dark:text-white sm:text-3xl">
             Active Directives
           </h1>
@@ -125,7 +133,7 @@ export default function Today() {
                   <span className="w-7 text-right text-[10px] font-mono text-black/50 dark:text-white/40">
                     {mission.progress}%
                   </span>
-                  <div className="group/slider relative flex h-3 flex-1 items-center">
+                  <div className="group/slider relative flex h-5 md:h-3 flex-1 items-center">
                     <input
                       type="range"
                       min={0}
@@ -158,7 +166,7 @@ export default function Today() {
                   <button
                     type="button"
                     onClick={() => toggleMission(mission._id)}
-                    className={`flex h-7 w-full items-center justify-center gap-1.5 rounded-md px-3 text-[11px] font-medium transition-all duration-150 active:scale-95 md:w-auto ${
+                    className={`flex h-9 md:h-7 w-full items-center justify-center gap-1.5 rounded-md px-3 text-[11px] font-medium transition-all duration-150 active:scale-95 md:w-auto ${
                       mission.completed
                         ? "bg-black/5 text-black/50 hover:bg-black/10 hover:text-black dark:bg-white/5 dark:text-white/40 dark:hover:bg-white/10 dark:hover:text-white"
                         : "bg-black text-white hover:bg-black/80 dark:bg-white/10 dark:text-white dark:hover:bg-white dark:hover:text-black"

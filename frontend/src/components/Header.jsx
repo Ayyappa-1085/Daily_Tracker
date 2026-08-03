@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
+import { useOutletContext } from "react-router-dom";
+import { Menu } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 
 export default function Header() {
   const user = useAuthStore((s) => s.user);
 
+  const { openSidebar } = useOutletContext() || {};
+
   const firstName = (user?.name || "there").split(" ")[0];
   const initial = (user?.name || "A").charAt(0).toUpperCase();
   const streak = user?.streak || 0;
 
-  // Real-time tracking hook
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
@@ -16,14 +19,12 @@ export default function Header() {
     return () => clearInterval(timer);
   }, []);
 
-  // 12-hour format configuration (e.g., "04:56 PM")
   const formattedTime = time.toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
     hour12: true,
   });
 
-  // Dynamic time-based greeting logic
   const getGreeting = () => {
     const hours = time.getHours();
     if (hours < 12) return "Good morning";
@@ -32,41 +33,50 @@ export default function Header() {
   };
 
   return (
-    <header className="pt-5">
-      <div className="flex flex-row items-center justify-between gap-5">
-        {/* Left Side: Greeting */}
-        <div className="min-w-0">
-          <h1 className="font-display text-3xl font-bold text-ink-50 tracking-tight">
-            {getGreeting()}, {firstName}.
-          </h1>
-          <p className="mt-1 text-sm text-ink-400">
-            Focus on progress, not perfection.
-          </p>
+    <header className="pt-2 sm:pt-5">
+      <div className="flex items-center justify-between gap-4">
+        {/* Left */}
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            type="button"
+            onClick={openSidebar}
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-base-700 bg-base-900 text-ink-50 lg:hidden"
+          >
+            <Menu size={20} />
+          </button>
+
+          <div className="min-w-0">
+            <h1 className="font-display text-2xl font-bold tracking-tight text-ink-50 sm:text-3xl">
+              {getGreeting()}, {firstName}.
+            </h1>
+
+            <p className="mt-1 text-xs text-ink-400 sm:text-sm">
+              Focus on progress, not perfection.
+            </p>
+          </div>
         </div>
 
-        {/* Right Side: Quick Stats & Profile */}
-        <div className="flex items-center gap-4">
-          {/* Vertical Stack: Streak Badge + Time directly below it */}
+        {/* Right */}
+        <div className="flex items-center gap-3 sm:gap-4">
           <div className="flex flex-col items-center gap-1">
             <div className="flex items-center gap-1.5 rounded-full border border-base-700 bg-base-850/40 px-3 py-1.5 text-xs font-semibold text-ink-200 select-none">
               <span>🔥</span>
               <span>{streak}d</span>
             </div>
 
-            <span className="text-[11px] font-medium tracking-wide text-ink-500 select-none uppercase">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-ink-500 sm:text-[11px]">
               {formattedTime}
             </span>
           </div>
 
-          {/* Clean Profile Avatar */}
           {user?.avatar ? (
             <img
               src={user.avatar}
               alt={user.name || "User Profile"}
-              className="h-10 w-10 rounded-full border border-base-700 object-cover"
+              className="h-9 w-9 rounded-full border border-base-700 object-cover sm:h-10 sm:w-10"
             />
           ) : (
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-base-700 bg-base-800 text-sm font-semibold text-ink-200 select-none">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-base-700 bg-base-800 text-sm font-semibold text-ink-200 select-none sm:h-10 sm:w-10">
               {initial}
             </div>
           )}

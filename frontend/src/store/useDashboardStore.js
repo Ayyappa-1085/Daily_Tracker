@@ -2,22 +2,49 @@ import { create } from "zustand";
 import api from "../api/axios";
 import { useAuthStore } from "./useAuthStore";
 
+const DASHBOARD_CACHE_KEY = "ascend_dashboard";
+
+function loadStoredDashboard() {
+  try {
+    const raw = localStorage.getItem(DASHBOARD_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveDashboardCache(data) {
+  try {
+    localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(data));
+  } catch {
+    // ignore storage failures
+  }
+}
+
 export const useDashboardStore = create((set, get) => ({
-  data: null,
+  data: loadStoredDashboard(),
   status: "idle", // idle | loading | error
   error: null,
   lastLevelUp: null,
 
   fetchDashboard: async () => {
-    set({ status: "loading", error: null });
+    const prev = get().data;
+    if (!prev) set({ status: "loading", error: null });
+
     try {
       const { data } = await api.get("/dashboard");
       set({ data, status: "idle" });
+      saveDashboardCache(data);
     } catch (err) {
-      set({
-        status: "error",
-        error: err.response?.data?.message || "Could not load your dashboard.",
-      });
+      if (!prev) {
+        set({
+          status: "error",
+          error:
+            err.response?.data?.message || "Could not load your dashboard.",
+        });
+      } else {
+        set({ status: "idle" });
+      }
     }
   },
 
@@ -49,6 +76,15 @@ export const useDashboardStore = create((set, get) => ({
   },
 
   clearLevelUp: () => set({ lastLevelUp: null }),
+
+  clearDashboardCache: () => {
+    try {
+      localStorage.removeItem(DASHBOARD_CACHE_KEY);
+    } catch {
+      // ignore
+    }
+    set({ data: null, status: "idle", error: null });
+  },
 
   updateMissionProgress: async (missionId, progress) => {
     const prev = get().data;
