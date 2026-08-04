@@ -57,6 +57,7 @@ html.light-theme {
 
 body {
   @apply bg-base-950 text-ink-200 font-sans antialiased;
+  overflow-x: hidden;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

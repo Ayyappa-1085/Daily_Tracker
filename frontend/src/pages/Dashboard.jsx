@@ -34,7 +34,7 @@ export default function Dashboard() {
   if (!data) return null;
 
   return (
-    <div className="px-4 sm:px-5 lg:px-4 xl:px-5 pb-8">
+    <div className="w-full px-3 pb-8 sm:px-4 lg:px-4 xl:px-5">
       <Header />
 
       {lastLevelUp && (

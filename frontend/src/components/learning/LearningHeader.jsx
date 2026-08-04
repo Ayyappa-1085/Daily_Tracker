@@ -14,21 +14,18 @@ export default function LearningHeader({
   const total = progress?.total || 0;
 
   return (
-    <div className="w-full flex flex-col gap-4">
-      {/* Title & Counters Row */}
-      <div className="flex items-baseline gap-3">
+    <div className="flex w-full flex-col gap-4">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
         <h1 className="font-display text-2xl font-bold tracking-tight text-slate-900 dark:text-ink-50">
           DSA Roadmap
         </h1>
-        <span className="text-xs font-medium text-slate-500 dark:text-ink-400 select-none">
+        <span className="select-none text-xs font-medium text-slate-500 dark:text-ink-400">
           {completed} / {total} Done
         </span>
       </div>
 
-      {/* Control Actions Row */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        {/* Search Input Box */}
-        <div className="relative flex-1 sm:max-w-xs">
+        <div className="relative w-full sm:max-w-xs">
           <Search
             size={14}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-ink-500"
@@ -38,16 +35,15 @@ export default function LearningHeader({
             placeholder="Search problems..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 dark:border-base-800/40 dark:bg-base-900/40 dark:text-ink-50 dark:placeholder:text-ink-500 py-1.5 pl-9 pr-3 text-xs outline-none focus:border-slate-400 dark:focus:border-base-700 transition-colors"
+            className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-9 pr-3 text-xs text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-400 dark:border-base-800/40 dark:bg-base-900/40 dark:text-ink-50 dark:placeholder:text-ink-500 dark:focus:border-base-700"
           />
         </div>
 
-        {/* Filters Group */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
           <select
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
-            className="cursor-pointer rounded-lg border border-slate-200 bg-white text-slate-700 dark:border-base-800/40 dark:bg-base-900/40 dark:text-ink-300 py-1.5 px-3 text-xs outline-none hover:text-slate-900 dark:hover:text-ink-50 focus:border-slate-400 dark:focus:border-base-700 transition-colors"
+            className="w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 outline-none transition-colors hover:text-slate-900 focus:border-slate-400 dark:border-base-800/40 dark:bg-base-900/40 dark:text-ink-300 dark:hover:text-ink-50 dark:focus:border-base-700 sm:w-auto"
           >
             <option value="">All Topics</option>
             {topics.map((item) => (
@@ -60,7 +56,7 @@ export default function LearningHeader({
           <select
             value={difficulty}
             onChange={(e) => setDifficulty(e.target.value)}
-            className="cursor-pointer rounded-lg border border-slate-200 bg-white text-slate-700 dark:border-base-800/40 dark:bg-base-900/40 dark:text-ink-300 py-1.5 px-3 text-xs outline-none hover:text-slate-900 dark:hover:text-ink-50 focus:border-slate-400 dark:focus:border-base-700 transition-colors"
+            className="w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 outline-none transition-colors hover:text-slate-900 focus:border-slate-400 dark:border-base-800/40 dark:bg-base-900/40 dark:text-ink-300 dark:hover:text-ink-50 dark:focus:border-base-700 sm:w-auto"
           >
             <option value="">All Difficulties</option>
             <option value="Easy">All Easy</option>

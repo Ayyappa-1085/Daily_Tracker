@@ -25,7 +25,7 @@ const ProfileRow = ({ label, value, isEmail = false }) => {
 
 const ProfileCard = ({ user, onLogout }) => {
   return (
-    <section className="mx-auto w-full max-w-[500px] rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-white/5 dark:bg-[#0a0a0b] dark:shadow-none">
+    <section className="mx-auto w-full max-w-[500px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/5 dark:bg-[#0a0a0b] dark:shadow-none sm:p-8">
       <div className="flex flex-col items-center text-center">
         <div className="flex h-24 w-24 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-700 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-200">
           <CircleUserRound className="h-12 w-12 stroke-[1.75]" />

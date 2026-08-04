@@ -14,7 +14,7 @@ const Settings = () => {
   };
 
   return (
-    <main className="min-h-screen bg-[#fafafa] px-4 py-6 text-slate-900 dark:bg-[#050505] dark:text-slate-100 sm:px-6 sm:py-8 lg:px-8">
+    <main className="min-h-screen w-full overflow-x-hidden bg-[#fafafa] px-3 py-5 text-slate-900 dark:bg-[#050505] dark:text-slate-100 sm:px-6 sm:py-8 lg:px-8">
       <div className="mx-auto w-full max-w-4xl">
         <header className="mb-6 sm:mb-8">
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">

@@ -9,6 +9,7 @@ import {
   Settings,
   Moon,
   Sun,
+  X,
 } from "lucide-react";
 import ProgressRing from "./ProgressRing";
 import { useAuthStore } from "../store/useAuthStore";
@@ -22,7 +23,7 @@ const NAV_ITEMS = [
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
-export default function Sidebar({ theme, onToggleTheme }) {
+export default function Sidebar({ theme, isOpen, onClose, onToggleTheme }) {
   const user = useAuthStore((s) => s.user);
 
   const level = user?.level ?? 1;
@@ -31,16 +32,27 @@ export default function Sidebar({ theme, onToggleTheme }) {
   const xpPct = Math.min(100, Math.round((xpIntoLevel / xpForNextLevel) * 100));
 
   return (
-    <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col justify-between border-r border-base-700 bg-base-900/95 px-4 py-6 backdrop-blur-xl">
+    <aside className="flex h-screen w-full flex-col justify-between border-r border-base-700 bg-base-900/95 px-4 py-6 backdrop-blur-xl">
       <div>
-        <div className="flex items-center gap-3 px-2">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-base-700 bg-base-800 text-ink-50">
-            <ChevronUp size={20} strokeWidth={2.8} />
-          </span>
+        <div className="flex items-center justify-between gap-3 px-2">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-base-700 bg-base-800 text-ink-50">
+              <ChevronUp size={20} strokeWidth={2.8} />
+            </span>
 
-          <span className="font-display text-lg font-semibold tracking-tight text-ink-50">
-            Ascend
-          </span>
+            <span className="font-display text-lg font-semibold tracking-tight text-ink-50">
+              Ascend
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-base-700 bg-base-800/70 text-ink-400 transition hover:bg-base-800 hover:text-ink-50 lg:hidden"
+            aria-label="Close navigation"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         <nav className="mt-8 flex flex-col gap-1.5">
@@ -49,6 +61,7 @@ export default function Sidebar({ theme, onToggleTheme }) {
               key={to}
               to={to}
               end={end}
+              onClick={onClose}
               className={({ isActive }) =>
                 `focus-ring flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                   isActive
@@ -72,16 +85,16 @@ export default function Sidebar({ theme, onToggleTheme }) {
             strokeWidth={4}
             color="rgb(var(--ink-400))"
           >
-           <img
-  src={
-    user?.avatar ||
-    `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(
-      user?.name || "Ascend"
-    )}`
-  }
-  alt={user?.name || "User"}
-  className="h-8 w-8 rounded-full object-cover"
-/>
+            <img
+              src={
+                user?.avatar ||
+                `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(
+                  user?.name || "Ascend"
+                )}`
+              }
+              alt={user?.name || "User"}
+              className="h-8 w-8 rounded-full object-cover"
+            />
           </ProgressRing>
 
           <div className="min-w-0">

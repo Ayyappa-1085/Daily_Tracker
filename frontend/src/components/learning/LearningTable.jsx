@@ -3,7 +3,7 @@ import LearningRow from "./LearningRow";
 export default function LearningTable({ questions }) {
   if (questions.length === 0) {
     return (
-      <div className="flex min-h-[260px] items-center justify-center p-10 border border-slate-200 bg-slate-50/50 dark:border-base-800 dark:bg-base-900/20 rounded-xl">
+      <div className="flex min-h-[260px] items-center justify-center rounded-xl border border-slate-200 bg-slate-50/50 p-10 dark:border-base-800 dark:bg-base-900/20">
         <div className="text-center">
           <p className="text-sm font-semibold text-slate-700 dark:text-ink-200">
             No questions found
@@ -17,42 +17,52 @@ export default function LearningTable({ questions }) {
   }
 
   return (
-    <div className="w-full rounded-xl border border-slate-200 bg-white dark:border-slate-800/80 dark:bg-base-900/20 overflow-hidden shadow-sm dark:shadow-none">
-      <div className="w-full">
-        <table className="w-full table-fixed border-collapse">
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/70 dark:border-slate-800/80 dark:bg-base-900/40">
-              <th className="w-[18%] px-5 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-500">
-                Topic
-              </th>
+    <div className="w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800/80 dark:bg-base-900/20 dark:shadow-none">
+      <div className="block sm:hidden">
+        <div className="flex flex-col gap-2 p-2">
+          {questions.map((question) => (
+            <LearningRow key={question._id} question={question} mobile />
+          ))}
+        </div>
+      </div>
 
-              <th className="w-[7%] px-5 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-500">
-                LC#
-              </th>
+      <div className="hidden sm:block">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] table-auto border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/70 dark:border-slate-800/80 dark:bg-base-900/40">
+                <th className="w-[18%] px-3 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-500 sm:px-5">
+                  Topic
+                </th>
 
-              <th className="w-[28%] px-5 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-500">
-                Problem Name
-              </th>
+                <th className="w-[7%] px-3 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-500 sm:px-5">
+                  LC#
+                </th>
 
-              <th className="w-[12%] px-5 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-500">
-                Difficulty
-              </th>
+                <th className="w-[28%] px-3 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-500 sm:px-5">
+                  Problem Name
+                </th>
 
-              <th className="w-[18%] px-5 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-300">
-                Pattern
-              </th>
+                <th className="w-[12%] px-3 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-500 sm:px-5">
+                  Difficulty
+                </th>
 
-              <th className="w-[17%] px-5 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-500">
-                Status
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {questions.map((question) => (
-              <LearningRow key={question._id} question={question} />
-            ))}
-          </tbody>
-        </table>
+                <th className="w-[18%] px-3 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-300 sm:px-5">
+                  Pattern
+                </th>
+
+                <th className="w-[17%] px-3 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-500 sm:px-5">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {questions.map((question) => (
+                <LearningRow key={question._id} question={question} />
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

@@ -1,12 +1,8 @@
 import { useEffect, useState } from "react";
-import { useOutletContext } from "react-router-dom";
-import { Menu } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 
 export default function Header() {
   const user = useAuthStore((s) => s.user);
-
-  const { openSidebar } = useOutletContext() || {};
 
   const firstName = (user?.name || "there").split(" ")[0];
   const initial = (user?.name || "A").charAt(0).toUpperCase();
@@ -34,17 +30,9 @@ export default function Header() {
 
   return (
     <header className="pt-2 sm:pt-5">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         {/* Left */}
         <div className="flex items-center gap-3 min-w-0">
-          <button
-            type="button"
-            onClick={openSidebar}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-base-700 bg-base-900 text-ink-50 lg:hidden"
-          >
-            <Menu size={20} />
-          </button>
-
           <div className="min-w-0">
             <h1 className="font-display text-2xl font-bold tracking-tight text-ink-50 sm:text-3xl">
               {getGreeting()}, {firstName}.
@@ -57,7 +45,7 @@ export default function Header() {
         </div>
 
         {/* Right */}
-        <div className="flex items-center gap-3 sm:gap-4">
+        <div className="flex items-center justify-end gap-3 sm:gap-4">
           <div className="flex flex-col items-center gap-1">
             <div className="flex items-center gap-1.5 rounded-full border border-base-700 bg-base-850/40 px-3 py-1.5 text-xs font-semibold text-ink-200 select-none">
               <span>🔥</span>
