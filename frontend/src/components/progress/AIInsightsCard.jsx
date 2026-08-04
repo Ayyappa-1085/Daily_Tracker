@@ -1,13 +1,8 @@
-import {
-  Sparkles,
-  TrendingUp,
-  Flame,
-  BookOpen,
-  Target,
-} from "lucide-react";
+import { memo, useMemo } from "react";
+import { Sparkles, TrendingUp, Flame, BookOpen, Target } from "lucide-react";
 
-export default function AIInsightsCard({ user, stats }) {
-  const insights = [
+function AIInsightsCard({ user, stats }) {
+  const insights = useMemo(() => [
     {
       icon: TrendingUp,
       title: "Performance",
@@ -40,55 +35,42 @@ export default function AIInsightsCard({ user, stats }) {
           ? "Reach 5000 XP."
           : `Reach Level ${(user?.level ?? 0) + 1}.`,
     },
-  ];
+  ], [stats?.completionRate, stats?.learningSolved, user?.level, user?.streak]);
 
   return (
-    <div className="rounded-xl border border-base-700 bg-base-900 p-4">
-      {/* Header */}
-      <div className="mb-4 flex items-center justify-between">
+    <section className="rounded-2xl border border-base-700/70 bg-base-900/30 p-4 sm:p-5">
+      <div className="flex items-baseline justify-between gap-4">
         <div>
-          <h2 className="text-sm font-semibold text-ink-50">
-            AI Insights
-          </h2>
+          <h2 className="text-sm font-semibold text-ink-50">AI Insights</h2>
 
-          <p className="text-[10px] text-ink-400">
+          <p className="mt-1 text-[10px] text-ink-400">
             Personalized recommendations.
           </p>
         </div>
 
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-base-700 bg-base-800">
-          <Sparkles size={14} className="text-ink-300" />
-        </div>
+        <Sparkles size={14} className="text-ink-400" />
       </div>
 
-      {/* Compact Cards */}
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {insights.map(({ icon: Icon, title, text }) => (
           <div
             key={title}
-            className="h-24 rounded-lg border border-base-700 bg-base-800 p-3 transition-all hover:border-base-600"
+            className="rounded-xl border border-base-700/60 bg-base-950/20 p-4 transition-all hover:border-base-600"
           >
             <div className="flex items-start gap-2">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-base-700 bg-base-900">
-                <Icon size={13} className="text-ink-300" />
-              </div>
+              <Icon size={13} className="mt-0.5 shrink-0 text-ink-300" />
 
               <div className="min-w-0">
-                <h3 className="text-xs font-semibold text-ink-50">
-                  {title}
-                </h3>
+                <h3 className="text-xs font-semibold text-ink-50">{title}</h3>
 
-                <p className="mt-1 text-[10px] leading-4 text-ink-400">
-                  {text}
-                </p>
+                <p className="mt-1 text-[10px] leading-4 text-ink-400">{text}</p>
               </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Today's Focus */}
-      <div className="mt-3 rounded-lg border border-base-700 bg-base-800 p-3">
+      <div className="mt-4 rounded-xl border border-base-700/60 bg-base-950/20 p-3">
         <p className="text-[9px] uppercase tracking-wider text-ink-500">
           Today's Focus
         </p>
@@ -98,6 +80,8 @@ export default function AIInsightsCard({ user, stats }) {
           your streak.
         </p>
       </div>
-    </div>
+    </section>
   );
 }
+
+export default memo(AIInsightsCard);

@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { HeartPulse } from "lucide-react";
 import Layout from "./components/Layout";
@@ -26,44 +26,42 @@ function RouteLoadingFallback() {
 export default function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={<RouteLoadingFallback />}>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+
+        <Route
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/today" element={<Today />} />
+          <Route path="/journal" element={<Journal />} />
+          <Route path="/learning" element={<Learning />} />
 
           <Route
+            path="/health"
             element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
+              <ComingSoon
+                icon={HeartPulse}
+                title="Health"
+                description="Workout and water logs will get their own detailed view here soon — quick actions on Home already track them day to day."
+              />
             }
-          >
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/today" element={<Today />} />
-            <Route path="/journal" element={<Journal />} />
-            <Route path="/learning" element={<Learning />} />
+          />
 
-            <Route
-              path="/health"
-              element={
-                <ComingSoon
-                  icon={HeartPulse}
-                  title="Health"
-                  description="Workout and water logs will get their own detailed view here soon — quick actions on Home already track them day to day."
-                />
-              }
-            />
+          <Route path="/progress" element={<Progress />} />
 
-            <Route path="/progress" element={<Progress />} />
+          <Route path="/settings" element={<Settings />} />
 
-            <Route path="/settings" element={<Settings />} />
+          <Route path="/learning/:id" element={<LearningDetails />} />
+        </Route>
 
-            <Route path="/learning/:id" element={<LearningDetails />} />
-          </Route>
-
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </BrowserRouter>
   );
 }

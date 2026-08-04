@@ -40,7 +40,9 @@ async function getQuestionById(req, res, next) {
   try {
     const userId = req.user._id;
 
-    const question = await LeetCodeQuestion.findById(req.params.id);
+    const question = await LeetCodeQuestion.findById(req.params.id)
+      .select("leetcodeNumber problemName topic difficulty pattern estimatedTime xp approach notes")
+      .lean();
 
     if (!question) {
       return res.status(404).json({
@@ -63,8 +65,18 @@ async function getQuestionById(req, res, next) {
       (entry) => entry.question.toString() === question._id.toString(),
     );
 
+    const displayNumber =
+      question.leetcodeNumber ?? question.questionNumber ?? question.problemNumber ?? question.id ?? null;
+
+    const displayTitle =
+      question.problemName ?? question.title ?? question.name ?? question.questionTitle ?? "Unknown Problem";
+
     res.json({
       ...question,
+      leetcodeNumber: displayNumber,
+      problemName: displayTitle,
+      questionNumber: displayNumber,
+      questionTitle: displayTitle,
       completed,
       current,
       approach: noteEntry?.approach || "",

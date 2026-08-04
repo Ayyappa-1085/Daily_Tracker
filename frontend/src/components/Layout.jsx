@@ -1,7 +1,15 @@
+import { Suspense, useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
 import { ArrowLeft, Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
+
+function RouteLoadingFallback() {
+  return (
+    <div className="route-transition-surface flex min-h-[40vh] items-center justify-center rounded-[24px] border border-base-700 bg-base-900/70 px-6 py-10 text-sm text-ink-400">
+      Loading…
+    </div>
+  );
+}
 
 export default function Layout() {
   const location = useLocation();
@@ -12,6 +20,7 @@ export default function Layout() {
   );
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isPageEntering, setIsPageEntering] = useState(false);
 
   useEffect(() => {
     localStorage.setItem("ascend_theme", theme);
@@ -29,6 +38,15 @@ export default function Layout() {
       document.body.style.overflow = "";
     };
   }, [isSidebarOpen]);
+
+  useEffect(() => {
+    setIsPageEntering(true);
+    const frame = requestAnimationFrame(() => {
+      setIsPageEntering(false);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [location.pathname]);
 
   const getPageTitle = () => {
     switch (location.pathname) {
@@ -64,7 +82,7 @@ export default function Layout() {
   };
 
   return (
-    <div className="relative flex min-h-screen overflow-x-hidden bg-base-950 text-ink-50 transition-colors duration-300">
+    <div className="relative flex min-h-screen overflow-hidden bg-base-950 text-ink-50 transition-colors duration-300">
       <div
         aria-hidden={!isSidebarOpen}
         className={`fixed inset-0 z-40 bg-base-950/70 backdrop-blur-sm transition-opacity duration-300 lg:hidden ${
@@ -76,7 +94,7 @@ export default function Layout() {
       />
 
       <div
-        className={`fixed inset-y-0 left-0 z-50 w-[84vw] max-w-[320px] transition-transform duration-300 ease-out lg:static lg:z-auto lg:w-64 lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-[84vw] max-w-[320px] transition-transform duration-300 ease-out lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 lg:w-64 lg:translate-x-0 ${
           isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
@@ -122,13 +140,22 @@ export default function Layout() {
         </div>
       </header>
 
-      <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto">
+      <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto lg:ml-64">
         <div className="mx-auto w-full max-w-[1600px] px-3 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-20 sm:px-4 sm:py-6 sm:pt-24 lg:px-6 lg:pt-0 xl:px-8">
-          <Outlet
-            context={{
-              openSidebar: () => setIsSidebarOpen(true),
-            }}
-          />
+          <Suspense fallback={<RouteLoadingFallback />}>
+            <div
+              key={location.pathname}
+              className={`route-transition-surface ${
+                isPageEntering ? "route-transition-entering" : "route-transition-ready"
+              }`}
+            >
+              <Outlet
+                context={{
+                  openSidebar: () => setIsSidebarOpen(true),
+                }}
+              />
+            </div>
+          </Suspense>
         </div>
       </main>
     </div>

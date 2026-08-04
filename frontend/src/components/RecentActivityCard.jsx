@@ -1,4 +1,6 @@
-import { Code2, Laptop2, Dumbbell, BookOpen, Droplet } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Code2, Laptop2, Dumbbell, BookOpen, Droplet, BookOpenText, Sparkles, Trophy, Target, NotebookPen } from "lucide-react";
+import { getStoredActivities } from "../utils/activityFeed.mjs";
 
 const TYPE_ICON = {
   dsa: Code2,
@@ -6,6 +8,11 @@ const TYPE_ICON = {
   workout: Dumbbell,
   reading: BookOpen,
   water: Droplet,
+  learning: BookOpenText,
+  progress: Sparkles,
+  journal: NotebookPen,
+  goal: Target,
+  achievement: Trophy,
 };
 
 function timeAgo(dateStr) {
@@ -22,9 +29,28 @@ function timeAgo(dateStr) {
 }
 
 export default function RecentActivityCard({ missions = [] }) {
-  const recent = missions
+  const [activities, setActivities] = useState(() => getStoredActivities());
+
+  useEffect(() => {
+    const sync = () => setActivities(getStoredActivities());
+    sync();
+    window.addEventListener("ascend-activity-feed-updated", sync);
+    return () => window.removeEventListener("ascend-activity-feed-updated", sync);
+  }, []);
+
+  const missionActivities = (missions || [])
     .filter((m) => m.completed && m.completedAt)
-    .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
+    .map((m) => ({
+      id: m._id,
+      title: `${m.title} completed`,
+      description: m.type,
+      category: "dsa",
+      timestamp: m.completedAt,
+      dedupKey: `mission:${m._id}`,
+    }));
+
+  const recent = [...missionActivities, ...activities]
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
     .slice(0, 5);
 
   return (
@@ -42,11 +68,11 @@ export default function RecentActivityCard({ missions = [] }) {
         </p>
       ) : (
         <ul className="mt-4 flex flex-col divide-y divide-base-700">
-          {recent.map((m) => {
-            const Icon = TYPE_ICON[m.type] || Code2;
+          {recent.map((item) => {
+            const Icon = TYPE_ICON[item.category] || Code2;
             return (
               <li
-                key={m._id}
+                key={item.id}
                 className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-base-700 text-ink-50">
@@ -55,13 +81,15 @@ export default function RecentActivityCard({ missions = [] }) {
 
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-ink-50">
-                    {m.title} completed
+                    {item.title}
                   </p>
-                  <p className="text-xs text-ink-500 capitalize">{m.type}</p>
+                  <p className="text-xs text-ink-500 capitalize">
+                    {item.description || item.category}
+                  </p>
                 </div>
 
                 <span className="shrink-0 text-xs text-ink-500">
-                  {timeAgo(m.completedAt)}
+                  {timeAgo(item.timestamp)}
                 </span>
               </li>
             );

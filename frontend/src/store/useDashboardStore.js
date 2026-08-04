@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import api from "../api/axios";
+import { recordActivity } from "../utils/activityFeed.mjs";
 import { useAuthStore } from "./useAuthStore";
 
 const DASHBOARD_CACHE_KEY = "ascend_dashboard";
@@ -65,6 +66,17 @@ export const useDashboardStore = create((set, get) => ({
       const { fetchDashboard } = get();
       if (data.user) useAuthStore.getState().setUser(data.user);
       if (data.leveledUp) set({ lastLevelUp: data.user.level });
+
+      const mission = prev.missions.find((m) => m._id === missionId);
+      if (mission) {
+        recordActivity({
+          title: mission.completed ? `${mission.title} completed` : `${mission.title} reopened`,
+          description: mission.type,
+          category: "dsa",
+          dedupKey: `mission:${missionId}:${mission.completed ? "completed" : "reopened"}`,
+        });
+      }
+
       await fetchDashboard();
     } catch (err) {
       // Roll back on failure.
@@ -101,6 +113,17 @@ export const useDashboardStore = create((set, get) => ({
       });
       if (data.user) useAuthStore.getState().setUser(data.user);
       if (data.leveledUp) set({ lastLevelUp: data.user.level });
+
+      const mission = prev.missions.find((m) => m._id === missionId);
+      if (mission) {
+        recordActivity({
+          title: progress >= 100 ? `${mission.title} completed` : `${mission.title} updated`,
+          description: `${progress}% complete`,
+          category: "dsa",
+          dedupKey: `mission:${missionId}:${progress >= 100 ? "complete" : "progress"}`,
+        });
+      }
+
       await get().fetchDashboard();
     } catch (err) {
       set({

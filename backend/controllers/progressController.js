@@ -1,88 +1,117 @@
-const ProgressHistory = require("../models/ProgressHistory");
+const Mission = require("../models/Mission");
+const UserLearningProgress = require("../models/UserLearningProgress");
+const { dateKeyDaysAgo } = require("../utils/date");
+const { syncStreakBreak } = require("../utils/gamification");
 
 async function getProgress(req, res, next) {
   try {
     const user = req.user;
 
+    syncStreakBreak(user);
+    if (user.isModified()) {
+      await user.save();
+    }
+
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
+    const monthKey = String(currentMonth).padStart(2, "0");
+    const currentMonthPrefix = `${currentYear}-${monthKey}`;
 
-    // Current Month
-    const currentHistory = await ProgressHistory.findOne({
+    const missions = await Mission.find({
       user: user._id,
-      year: currentYear,
-      month: currentMonth,
+    }).lean();
+
+    const missionsByDate = new Map();
+
+    for (const mission of missions) {
+      if (!missionsByDate.has(mission.date)) {
+        missionsByDate.set(mission.date, []);
+      }
+
+      missionsByDate.get(mission.date).push(mission);
+    }
+
+    const buildDaySummary = (date) => {
+      const dayMissions = missionsByDate.get(date) || [];
+
+      return dayMissions.reduce(
+        (summary, mission) => {
+          summary.completed += mission.completed ? 1 : 0;
+          summary.total += 1;
+          summary.xp += mission.completed ? mission.xpReward || 0 : 0;
+          return summary;
+        },
+        {
+          date,
+          completed: 0,
+          total: 0,
+          xp: 0,
+        },
+      );
+    };
+
+    const weekly = [];
+    for (let i = 6; i >= 0; i -= 1) {
+      const date = dateKeyDaysAgo(i);
+      const day = buildDaySummary(date);
+
+      weekly.push({
+        day: new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
+          weekday: "short",
+          timeZone: "UTC",
+        }),
+        ...day,
+      });
+    }
+
+    const currentMonthDays = new Date(currentYear, currentMonth, 0).getDate();
+    const monthly = Array.from({ length: 35 }, (_, index) => {
+      const dayNumber = index + 1;
+
+      if (dayNumber > currentMonthDays) {
+        return {
+          date: "",
+          completed: 0,
+          total: 0,
+          xp: 0,
+        };
+      }
+
+      const date = `${currentMonthPrefix}-${String(dayNumber).padStart(2, "0")}`;
+      return buildDaySummary(date);
     });
-    const monthly = currentHistory?.days || [];
 
-const weekly = [];
-
-for (let i = 6; i >= 0; i--) {
-  const date = new Date();
-  date.setDate(date.getDate() - i);
-
-  const dateKey = date.toISOString().split("T")[0];
-
-  const labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-  const existing = monthly.find((d) => d.date === dateKey);
-
-  weekly.push({
-    day: labels[date.getDay()],
-    date: dateKey,
-    completed: existing?.completed || 0,
-    total: existing?.total || 0,
-    xp: existing?.xp || 0,
-  });
-}
-
-    // Last 12 Months
-    const history = await ProgressHistory.find({
-      user: user._id,
-    })
-      .sort({
-        year: -1,
-        month: -1,
-      })
-      .limit(12);
-
-    // Statistics
     let totalXp = 0;
     let totalCompleted = 0;
     let totalMissions = 0;
-    let totalLearning = 0;
+    let bestDay = { date: "", xp: 0 };
 
-    let bestDay = {
-      date: "",
-      xp: 0,
-    };
+    for (const [date, dayMissions] of missionsByDate.entries()) {
+      const dayXp = dayMissions.reduce(
+        (sum, mission) => sum + (mission.completed ? mission.xpReward || 0 : 0),
+        0,
+      );
+      const dayCompleted = dayMissions.filter((mission) => mission.completed).length;
 
-    history.forEach((month) => {
-      month.days.forEach((day) => {
-        totalXp += day.xp;
-        totalCompleted += day.completed;
-        totalMissions += day.total;
-        totalLearning += day.learning;
+      totalXp += dayXp;
+      totalCompleted += dayCompleted;
+      totalMissions += dayMissions.length;
 
-        if (day.xp > bestDay.xp) {
-          bestDay = {
-            date: day.date,
-            xp: day.xp,
-          };
-        }
-      });
-    });
+      if (dayXp > bestDay.xp) {
+        bestDay = { date, xp: dayXp };
+      }
+    }
 
-    const averageXp =
-      totalXp === 0
-        ? 0
-        : Math.round(totalXp / Math.max(monthly.length, 1));
+    const activeDays = missionsByDate.size;
+    const averageXp = activeDays === 0 ? 0 : Math.round(totalXp / activeDays);
+    const completionRate = totalMissions === 0 ? 0 : Math.round((totalCompleted / totalMissions) * 100);
 
-    const completionRate =
-      totalMissions === 0
-        ? 0
-        : Math.round((totalCompleted / totalMissions) * 100);
+    const learning = await UserLearningProgress.findOne({
+      user: user._id,
+    }).lean();
+
+    const learningSolved = learning?.completedQuestions?.length || 0;
 
     res.json({
       user: {
@@ -101,7 +130,7 @@ for (let i = 6; i >= 0; i--) {
         averageXp,
         completionRate,
         bestDay,
-        learningSolved: totalLearning,
+        learningSolved,
       },
     });
   } catch (err) {

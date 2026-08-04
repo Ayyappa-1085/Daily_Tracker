@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import Header from "../components/Header";
 import TodaysMissionCard from "../components/TodaysMissionCard";
 import OverallProgressCard from "../components/OverallProgressCard";
@@ -6,10 +6,19 @@ import ContinueLearningCard from "../components/ContinueLearningCard";
 import QuoteFooter from "../components/QuoteFooter";
 import RecentActivityCard from "../components/RecentActivityCard";
 import { useDashboardStore } from "../store/useDashboardStore";
+import { resolveDailyQuote } from "../utils/dailyQuote.mjs";
 
 export default function Dashboard() {
   const { data, status, error, fetchDashboard, lastLevelUp, clearLevelUp } =
     useDashboardStore();
+
+  const dailyQuote = useMemo(() => {
+    if (!data?.quote) {
+      return resolveDailyQuote({ fallbackQuote: "Consistency beats intensity." });
+    }
+
+    return resolveDailyQuote({ fallbackQuote: data.quote });
+  }, [data?.quote]);
 
   useEffect(() => {
     fetchDashboard();
@@ -69,7 +78,7 @@ export default function Dashboard() {
 
         {/* Quote */}
 
-        <QuoteFooter quote={data.quote} />
+        <QuoteFooter quote={dailyQuote.quote} />
 
         {/* Recent Activity — derived from missions already in data */}
 

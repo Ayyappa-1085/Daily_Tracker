@@ -28,30 +28,22 @@ export default function LearningTable({ questions }) {
 
       <div className="hidden sm:block">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] table-auto border-collapse">
+          <table className="w-full min-w-[680px] table-auto border-collapse">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/70 dark:border-slate-800/80 dark:bg-base-900/40">
-                <th className="w-[18%] px-3 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-500 sm:px-5">
-                  Topic
-                </th>
-
-                <th className="w-[7%] px-3 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-500 sm:px-5">
+              <tr className="border-b border-slate-200/70 bg-slate-50/50 dark:border-slate-800/70 dark:bg-base-900/25">
+                <th className="w-[8%] px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-ink-500 sm:px-5">
                   LC#
                 </th>
 
-                <th className="w-[28%] px-3 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-500 sm:px-5">
+                <th className="w-[54%] px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-ink-500 sm:px-5">
                   Problem Name
                 </th>
 
-                <th className="w-[12%] px-3 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-500 sm:px-5">
+                <th className="w-[14%] px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-ink-500 sm:px-5">
                   Difficulty
                 </th>
 
-                <th className="w-[18%] px-3 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-300 sm:px-5">
-                  Pattern
-                </th>
-
-                <th className="w-[17%] px-3 py-3.5 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-ink-500 sm:px-5">
+                <th className="w-[12%] px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-ink-500 sm:px-5">
                   Status
                 </th>
               </tr>

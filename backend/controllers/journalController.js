@@ -78,6 +78,47 @@ async function createEntry(req, res, next) {
   }
 }
 
+// PATCH /api/journal/:id
+async function updateEntry(req, res, next) {
+  try {
+    const { content, mood } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({
+        message: "Journal content cannot be empty.",
+      });
+    }
+
+    const entry = await Journal.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        user: req.user._id,
+      },
+      {
+        content: content.trim(),
+        mood: mood || "okay",
+      },
+      {
+        new: true,
+      },
+    );
+
+    if (!entry) {
+      return res.status(404).json({
+        message: "Journal entry not found.",
+      });
+    }
+
+    await updateProgressHistory(req.user);
+
+    res.json({
+      entry,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // DELETE /api/journal/:id
 async function deleteEntry(req, res, next) {
   try {
@@ -107,5 +148,6 @@ module.exports = {
   getAll,
   getToday,
   createEntry,
+  updateEntry,
   deleteEntry,
 };

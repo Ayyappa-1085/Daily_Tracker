@@ -77,7 +77,7 @@ export default function Sidebar({ theme, isOpen, onClose, onToggleTheme }) {
         </nav>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 pb-2 pt-2 sm:pb-0 lg:pb-0">
         <div className="card flex items-center gap-3 p-3">
           <ProgressRing
             progress={xpPct}
@@ -113,7 +113,7 @@ export default function Sidebar({ theme, isOpen, onClose, onToggleTheme }) {
         <button
           type="button"
           onClick={onToggleTheme}
-          className="focus-ring flex items-center gap-3 rounded-xl border border-base-700 px-3 py-2.5 text-sm font-medium text-ink-400 transition-all duration-200 hover:bg-base-800 hover:text-ink-50"
+          className="focus-ring mt-1 flex items-center gap-3 rounded-xl border border-base-700 px-3 py-2.5 text-sm font-medium text-ink-400 transition-all duration-200 hover:bg-base-800 hover:text-ink-50 pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
         >
           {theme === "dark" ? <Moon size={18} /> : <Sun size={18} />}
 

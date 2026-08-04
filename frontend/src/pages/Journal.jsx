@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { NotebookPen, Trash2 } from "lucide-react";
+import { NotebookPen, PencilLine, Trash2, X } from "lucide-react";
 import api from "../api/axios";
+import { recordActivity } from "../utils/activityFeed.mjs";
 
 const MOODS = [
   { value: "great", emoji: "🤩", label: "Great" },
@@ -13,6 +14,7 @@ export default function Journal() {
   const [entries, setEntries] = useState([]);
   const [content, setContent] = useState("");
   const [mood, setMood] = useState("okay");
+  const [editingEntryId, setEditingEntryId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -25,10 +27,6 @@ export default function Journal() {
         api.get("/journal/today"),
       ]);
       setEntries(all.entries);
-      if (today.entry) {
-        setContent(today.entry.content);
-        setMood(today.entry.mood);
-      }
     } catch (err) {
       setError(err.response?.data?.message || "Could not load your journal.");
     } finally {
@@ -46,8 +44,48 @@ export default function Journal() {
     setSaving(true);
     setError("");
     try {
-      await api.post("/journal", { content, mood });
-      await load();
+      const payload = { content: content.trim(), mood };
+
+      if (editingEntryId) {
+        const { data } = await api.patch(`/journal/${editingEntryId}`, payload);
+
+        setEntries((prev) =>
+          prev.map((entry) =>
+            entry._id === editingEntryId ? data.entry : entry,
+          ),
+        );
+
+        recordActivity({
+          title: "Journal entry updated",
+          description: "Refined an existing reflection",
+          category: "journal",
+          dedupKey: `journal:update:${editingEntryId}`,
+        });
+      } else {
+        const { data } = await api.post("/journal", payload);
+
+        setEntries((prev) => {
+          const index = prev.findIndex((entry) => entry._id === data.entry._id);
+          if (index === -1) {
+            return [data.entry, ...prev];
+          }
+
+          const next = [...prev];
+          next[index] = data.entry;
+          return next;
+        });
+
+        recordActivity({
+          title: "Journal entry created",
+          description: "Added today's reflection",
+          category: "journal",
+          dedupKey: "journal:create",
+        });
+      }
+
+      setContent("");
+      setMood("okay");
+      setEditingEntryId(null);
     } catch (err) {
       setError(err.response?.data?.message || "Could not save this entry.");
     } finally {
@@ -55,10 +93,27 @@ export default function Journal() {
     }
   }
 
+  function handleEdit(entry) {
+    setEditingEntryId(entry._id);
+    setContent(entry.content);
+    setMood(entry.mood);
+    setError("");
+  }
+
+  function handleCancelEdit() {
+    setEditingEntryId(null);
+    setContent("");
+    setMood("okay");
+    setError("");
+  }
+
   async function handleDelete(id) {
     try {
       await api.delete(`/journal/${id}`);
       setEntries((prev) => prev.filter((e) => e._id !== id));
+      if (editingEntryId === id) {
+        handleCancelEdit();
+      }
     } catch (err) {
       setError(err.response?.data?.message || "Could not delete this entry.");
     }
@@ -110,12 +165,27 @@ export default function Journal() {
 
           {error && <p className="text-sm text-accent-red">{error}</p>}
 
+          {editingEntryId && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-ink-400">Editing saved entry</span>
+
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="focus-ring inline-flex items-center gap-1 rounded-lg border border-base-700 px-3 py-2 text-xs text-ink-400 transition hover:bg-base-700 hover:text-ink-50"
+              >
+                <X size={14} />
+                Cancel
+              </button>
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={saving || !content.trim()}
             className="focus-ring w-full rounded-lg bg-accent-gold px-5 py-2.5 text-sm font-semibold text-base-950 transition hover:brightness-105 disabled:opacity-50 sm:w-fit"
           >
-            {saving ? "Saving…" : "Save Entry"}
+            {saving ? "Saving…" : editingEntryId ? "Update Entry" : "Save Entry"}
           </button>
         </form>
       </section>
@@ -139,7 +209,7 @@ export default function Journal() {
               return (
                 <div
                   key={entry._id}
-                  className="card flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between"
+                  className="group card flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-medium text-ink-500">
@@ -151,14 +221,25 @@ export default function Journal() {
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(entry._id)}
-                    aria-label="Delete entry"
-                    className="focus-ring self-end rounded-lg p-2 text-ink-500 hover:bg-base-700 hover:text-accent-red sm:self-start"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="flex items-center gap-1 self-end sm:self-start">
+                    <button
+                      type="button"
+                      onClick={() => handleEdit(entry)}
+                      aria-label="Edit entry"
+                      className="focus-ring rounded-lg p-2 text-ink-500 transition hover:bg-base-700 hover:text-accent-gold sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100"
+                    >
+                      <PencilLine size={16} />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(entry._id)}
+                      aria-label="Delete entry"
+                      className="focus-ring rounded-lg p-2 text-ink-500 hover:bg-base-700 hover:text-accent-red"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
               );
             })}

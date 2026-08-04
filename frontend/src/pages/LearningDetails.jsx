@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ExternalLink } from "lucide-react";
 import api from "../api/axios";
 
 export default function LearningDetails() {
@@ -54,6 +54,34 @@ export default function LearningDetails() {
     }
   }
 
+  function handleOpenInLeetCode() {
+    const source =
+      question.leetcodeUrl ??
+      question.leetcodeSlug ??
+      question.url ??
+      question.slug ??
+      question.problemName ??
+      "";
+
+    const leetcodeTarget = source.startsWith("http")
+      ? source
+      : source
+          .toString()
+          .normalize("NFKD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+
+    if (!leetcodeTarget) return;
+
+    const targetUrl = leetcodeTarget.startsWith("http")
+      ? leetcodeTarget
+      : `https://leetcode.com/problems/${leetcodeTarget}/`;
+
+    window.open(targetUrl, "_blank", "noopener,noreferrer");
+  }
+
   useEffect(() => {
     if (!question || !isDirty) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -102,13 +130,26 @@ export default function LearningDetails() {
       </button>
 
       <section>
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-ink-500">
-          LeetCode #{question.leetcodeNumber}
-        </p>
+        <div className="mt-1 flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-ink-500">
+              LeetCode #{question.leetcodeNumber}
+            </p>
 
-        <h1 className="mt-1 max-w-4xl break-words text-2xl font-bold leading-tight tracking-tight text-ink-50 sm:text-3xl md:text-4xl">
-          {question.problemName}
-        </h1>
+            <h1 className="mt-1 max-w-4xl break-words text-2xl font-bold leading-tight tracking-tight text-ink-50 sm:text-3xl md:text-4xl">
+              {question.problemName}
+            </h1>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleOpenInLeetCode}
+            aria-label="Open in LeetCode"
+            className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-[#ffa116] transition hover:opacity-80 dark:border-base-700/60 dark:bg-base-900/80"
+          >
+            <ExternalLink size={16} />
+          </button>
+        </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-400">
           <span>{question.topic}</span>
