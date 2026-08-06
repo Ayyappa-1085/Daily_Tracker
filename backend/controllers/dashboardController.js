@@ -10,6 +10,7 @@ const {
 } = require("../utils/timelineDefaults");
 const { syncStreakBreak } = require("../utils/gamification");
 const { generateInsight } = require("../utils/insightEngine");
+const { getCache, setCache, clearUserCache } = require("../utils/cache");
 
 /** Last 7 days of completion-% and XP-earned, oldest first — feeds the sparkline charts. */
 async function getWeeklyTrends(userId) {
@@ -48,6 +49,12 @@ async function getDashboard(req, res, next) {
   try {
     const date = req.query.date || todayKey();
     const user = req.user;
+    const cacheKey = `dashboard:${user._id}:${date}`;
+    const cached = getCache(cacheKey);
+
+    if (cached) {
+      return res.json(cached);
+    }
 
     syncStreakBreak(user);
     if (user.isModified()) {
@@ -86,7 +93,9 @@ async function getDashboard(req, res, next) {
     let continueLearning = null;
     const progressDoc = await UserLearningProgress.findOne({
       user: user._id,
-    }).lean();
+    })
+      .select("currentQuestion completedQuestions progress")
+      .lean();
 
     if (progressDoc?.currentQuestion) {
       const currentQuestion = await LeetCodeQuestion.findById(
@@ -120,7 +129,7 @@ async function getDashboard(req, res, next) {
       }
     }
 
-    res.json({
+    const response = {
       date,
       greetingName: user.name,
       streakDay: user.streak,
@@ -138,7 +147,11 @@ async function getDashboard(req, res, next) {
       aiInsight: insight,
       timeline,
       trends,
-    });
+    };
+
+    setCache(cacheKey, response, 15 * 1000);
+
+    res.json(response);
   } catch (err) {
     next(err);
   }

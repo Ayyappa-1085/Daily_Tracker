@@ -18,8 +18,9 @@ const progressRoutes = require("./routes/progressRoutes");
 const app = express();
 
 const clientOrigin = process.env.CLIENT_URL || "http://localhost:5173";
+app.disable("x-powered-by");
 app.use(cors({ origin: clientOrigin }));
-app.use(express.json());
+app.use(express.json({ limit: "256kb" }));
 app.use(compression());
 
 app.get("/api/health", (req, res) =>
@@ -46,7 +47,13 @@ app.use("/api/progress", progressRoutes);
 
 if (process.env.NODE_ENV === "production") {
   const clientBuildPath = path.resolve(__dirname, "../frontend/dist");
-  app.use(express.static(clientBuildPath));
+  app.use(
+    express.static(clientBuildPath, {
+      maxAge: "1y",
+      immutable: true,
+      etag: false,
+    }),
+  );
 
   app.get("*", (req, res) => {
     if (req.path.startsWith("/api")) {

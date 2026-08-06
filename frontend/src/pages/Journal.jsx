@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NotebookPen, PencilLine, Trash2, X } from "lucide-react";
 import api from "../api/axios";
+import { API_BASE_URL } from "../api/axios";
 import { recordActivity } from "../utils/activityFeed.mjs";
 
 const MOODS = [
@@ -21,14 +22,32 @@ export default function Journal() {
 
   async function load() {
     setLoading(true);
+    setError("");
     try {
-      const [{ data: all }, { data: today }] = await Promise.all([
-        api.get("/journal"),
-        api.get("/journal/today"),
+      const token = localStorage.getItem("ascend_token");
+      const [journalResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/journal`, {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }),
+        fetch(`${API_BASE_URL}/journal/today`, {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }),
       ]);
-      setEntries(all.entries);
+
+      if (!journalResponse.ok) {
+        const errorData = await journalResponse.json().catch(() => ({}));
+        throw new Error(errorData.message || "Could not load your journal.");
+      }
+
+      const all = await journalResponse.json();
+      setEntries(Array.isArray(all?.entries) ? all.entries : []);
     } catch (err) {
-      setError(err.response?.data?.message || "Could not load your journal.");
+      setEntries([]);
+      setError(err.message || "Could not load your journal.");
     } finally {
       setLoading(false);
     }

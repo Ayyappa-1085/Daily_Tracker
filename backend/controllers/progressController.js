@@ -2,10 +2,17 @@ const Mission = require("../models/Mission");
 const UserLearningProgress = require("../models/UserLearningProgress");
 const { dateKeyDaysAgo } = require("../utils/date");
 const { syncStreakBreak } = require("../utils/gamification");
+const { getCache, setCache } = require("../utils/cache");
 
 async function getProgress(req, res, next) {
   try {
     const user = req.user;
+    const cacheKey = `progress:${user._id}`;
+    const cached = getCache(cacheKey);
+
+    if (cached) {
+      return res.json(cached);
+    }
 
     syncStreakBreak(user);
     if (user.isModified()) {
@@ -113,7 +120,7 @@ async function getProgress(req, res, next) {
 
     const learningSolved = learning?.completedQuestions?.length || 0;
 
-    res.json({
+    const response = {
       user: {
         level: user.level,
         totalXp: user.totalXp,
@@ -132,7 +139,11 @@ async function getProgress(req, res, next) {
         bestDay,
         learningSolved,
       },
-    });
+    };
+
+    setCache(cacheKey, response, 20 * 1000);
+
+    res.json(response);
   } catch (err) {
     next(err);
   }

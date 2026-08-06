@@ -1,5 +1,6 @@
 const TimelineEvent = require("../models/TimelineEvent");
 const { todayKey } = require("../utils/date");
+const { clearUserCache } = require("../utils/cache");
 const {
   ensureTodayTimeline,
   computeDisplayStatus,
@@ -42,6 +43,7 @@ async function updateStatus(req, res, next) {
     if (!event)
       return res.status(404).json({ message: "Timeline event not found." });
 
+    clearUserCache(req.user._id);
     res.json({ event });
   } catch (err) {
     next(err);
@@ -68,6 +70,7 @@ async function createEvent(req, res, next) {
       linkedType: linkedType || null,
     });
 
+    clearUserCache(req.user._id);
     res.status(201).json({ event });
   } catch (err) {
     next(err);

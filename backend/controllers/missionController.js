@@ -8,6 +8,7 @@ const {
 } = require("../utils/gamification");
 const { syncTimelineForMission } = require("../utils/timelineDefaults");
 const { updateProgressHistory } = require("../utils/progressService");
+const { clearUserCache } = require("../utils/cache");
 
 // GET /api/missions/today
 async function getToday(req, res, next) {
@@ -69,6 +70,7 @@ async function toggleMission(req, res, next) {
       mission.type,
       mission.completed
     );
+    clearUserCache(user._id);
 
     // ✅ Update Progress History
     
@@ -141,6 +143,7 @@ async function updateProgress(req, res, next) {
       mission.type,
       mission.completed
     );
+    clearUserCache(user._id);
 
     // ✅ Update Progress History
     await updateProgressHistory(user);

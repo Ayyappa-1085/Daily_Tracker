@@ -4,6 +4,7 @@ import { recordActivity } from "../utils/activityFeed.mjs";
 import { useAuthStore } from "./useAuthStore";
 
 const DASHBOARD_CACHE_KEY = "ascend_dashboard";
+const DASHBOARD_REFRESH_IN_PROGRESS = Symbol("dashboard_refresh_in_progress");
 
 function loadStoredDashboard() {
   try {
@@ -30,14 +31,25 @@ export const useDashboardStore = create((set, get) => ({
 
   fetchDashboard: async () => {
     const prev = get().data;
-    if (!prev) set({ status: "loading", error: null });
+    const cached = loadStoredDashboard();
+
+    if (cached && !prev) {
+      set({ data: cached, status: "idle", error: null });
+    } else if (cached && prev) {
+      set({ data: cached, status: "idle", error: null });
+    } else if (!prev) {
+      set({ status: "loading", error: null });
+    }
+
+    if (get()[DASHBOARD_REFRESH_IN_PROGRESS]) return;
+    set({ [DASHBOARD_REFRESH_IN_PROGRESS]: true });
 
     try {
       const { data } = await api.get("/dashboard");
-      set({ data, status: "idle" });
+      set({ data, status: "idle", error: null });
       saveDashboardCache(data);
     } catch (err) {
-      if (!prev) {
+      if (!prev && !cached) {
         set({
           status: "error",
           error:
@@ -46,6 +58,8 @@ export const useDashboardStore = create((set, get) => ({
       } else {
         set({ status: "idle" });
       }
+    } finally {
+      set({ [DASHBOARD_REFRESH_IN_PROGRESS]: false });
     }
   },
 

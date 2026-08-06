@@ -2,11 +2,18 @@ const LeetCodeQuestion = require("../models/LeetCodeQuestion");
 const UserLearningProgress = require("../models/UserLearningProgress");
 const { awardXp } = require("../utils/gamification");
 const { updateProgressHistory } = require("../utils/progressService");
+const { getCache, setCache, clearUserCache } = require("../utils/cache");
 
 // GET /api/learning/questions
 async function getAllQuestions(req, res, next) {
   try {
     const userId = req.user._id;
+    const cacheKey = `learning:${userId}:questions`;
+    const cached = getCache(cacheKey);
+
+    if (cached) {
+      return res.json(cached);
+    }
 
     const questions = await LeetCodeQuestion.find({ isActive: true })
       .select("leetcodeNumber problemName topic difficulty pattern estimatedTime xp")
@@ -15,7 +22,9 @@ async function getAllQuestions(req, res, next) {
 
     const progress = await UserLearningProgress.findOne({
       user: userId,
-    }).lean();
+    })
+      .select("completedQuestions currentQuestion")
+      .lean();
 
     const completedIds = new Set(
       (progress?.completedQuestions || []).map((id) => id.toString()),
@@ -28,6 +37,8 @@ async function getAllQuestions(req, res, next) {
       completed: completedIds.has(question._id.toString()),
       current: currentId === question._id.toString(),
     }));
+
+    setCache(cacheKey, result, 30 * 1000);
 
     res.json(result);
   } catch (err) {
@@ -117,6 +128,7 @@ async function saveQuestionNotes(req, res, next) {
     }
 
     await progress.save();
+    clearUserCache(userId);
 
     res.json({
       approach,
@@ -140,6 +152,7 @@ async function setCurrentQuestion(req, res, next) {
 
     progress.currentQuestion = questionId;
     await progress.save();
+    clearUserCache(userId);
 
     res.json(progress);
   } catch (err) {
@@ -198,6 +211,7 @@ async function updateProgress(req, res, next) {
     );
 
     await progress.save();
+    clearUserCache(userId);
 
     await updateProgressHistory(req.user);
 

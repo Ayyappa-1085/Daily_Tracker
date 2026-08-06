@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, ExternalLink } from "lucide-react";
 import api from "../api/axios";
+import { API_BASE_URL } from "../api/axios";
 
 export default function LearningDetails() {
   const navigate = useNavigate();
@@ -19,15 +20,36 @@ export default function LearningDetails() {
 
   useEffect(() => {
     async function fetchQuestion() {
+      if (!id) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        const { data } = await api.get(`/learning/question/${id}`);
+        const token = localStorage.getItem("ascend_token");
+        const response = await fetch(`${API_BASE_URL}/learning/question/${id}`, {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || "Failed to load question.");
+        }
+
+        const data = await response.json();
         setQuestion(data);
         setDraftApproach(data.approach || "");
         setDraftNotes(data.notes || "");
         setSaveStatus("Saved");
         setSaveError(null);
         setIsDirty(false);
+
         await api.patch(`/learning/current/${id}`);
+      } catch (err) {
+        setQuestion(null);
+        setSaveError(err.message || "Failed to load question.");
       } finally {
         setLoading(false);
       }
