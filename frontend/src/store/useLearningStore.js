@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import api from "../api/axios";
+import { API_BASE_URL } from "../api/axios";
 
 const LEARNING_CACHE_KEY = "ascend_learning";
 
@@ -47,7 +47,19 @@ export const useLearningStore = create((set, get) => ({
     set({ inFlight: true });
 
     try {
-      const { data } = await api.get("/learning/questions");
+      const token = localStorage.getItem("ascend_token");
+      const response = await fetch(`${API_BASE_URL}/learning/questions`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to load learning roadmap.");
+      }
+
+      const data = await response.json();
       const nextQuestions = Array.isArray(data) ? data : [];
 
       set({
@@ -63,10 +75,7 @@ export const useLearningStore = create((set, get) => ({
     } catch (err) {
       set({
         status: "error",
-        error:
-          err.response?.data?.message ||
-          err.message ||
-          "Failed to load learning roadmap.",
+        error: err.message || "Failed to load learning roadmap.",
       });
     } finally {
       set({ inFlight: false });
