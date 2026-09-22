@@ -10,4 +10,5 @@ const recordSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 recordSchema.index({ userId: 1, habitId: 1, date: 1 }, { unique: true });
+recordSchema.index({ userId: 1, date: 1 });
 module.exports = mongoose.model('HabitRecord', recordSchema);

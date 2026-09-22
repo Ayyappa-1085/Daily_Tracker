@@ -21,6 +21,7 @@ import {
   Zap,
 } from "lucide-react";
 import "./App.css";
+import { clearUserCache, getCache, removeCache, setCache } from "./utils/cache";
 
 const rawApiUrl = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
@@ -205,29 +206,50 @@ const clearToken = () => {
     sessionStorage.removeItem(TOKEN_KEY);
   } catch {}
 };
+const inflightGetRequests = new Map();
+
 function api(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
   const token = getToken();
-  return fetch(`${API}${path}`, {
+  const dedupKey = method === "GET" ? `${path}::${token || ""}` : null;
+
+  if (dedupKey && inflightGetRequests.has(dedupKey)) {
+    return inflightGetRequests.get(dedupKey);
+  }
+
+  const reqPromise = fetch(`${API}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
-  }).then(async (response) => {
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      if (
-        response.status === 401 &&
-        path !== "/auth/login" &&
-        path !== "/auth/register"
-      ) {
-        clearToken();
+  })
+    .then(async (response) => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (
+          response.status === 401 &&
+          path !== "/auth/login" &&
+          path !== "/auth/register"
+        ) {
+          clearToken();
+        }
+        throw new Error(data.message || "Unable to complete request.");
       }
-      throw new Error(data.message || "Unable to complete request.");
-    }
-    return data;
-  });
+      return data;
+    })
+    .finally(() => {
+      if (dedupKey) {
+        inflightGetRequests.delete(dedupKey);
+      }
+    });
+
+  if (dedupKey) {
+    inflightGetRequests.set(dedupKey, reqPromise);
+  }
+
+  return reqPromise;
 }
 function Icon({ name, size = 18 }) {
   const icons = {
@@ -256,6 +278,7 @@ function AuthScreen({ onAuth }) {
         body: JSON.stringify(form),
       });
       setToken(data.token);
+      setCache("focusday_auth_user", data.user);
       if (
         typeof window !== "undefined" &&
         window.location.pathname === "/login"
@@ -1041,9 +1064,15 @@ function App() {
       setAuthLoading(false);
       return;
     }
+    const cachedUser = getCache("focusday_auth_user");
+    if (cachedUser) {
+      setUser(cachedUser);
+      setAuthLoading(false);
+    }
     api("/auth/me")
       .then((data) => {
         setUser(data.user);
+        setCache("focusday_auth_user", data.user);
         if (
           typeof window !== "undefined" &&
           window.location.pathname === "/login"
@@ -1051,58 +1080,151 @@ function App() {
           window.history.replaceState({}, "", "/");
         }
       })
-      .catch(() => clearToken())
+      .catch(() => {
+        clearToken();
+        removeCache("focusday_auth_user");
+        setUser(null);
+      })
       .finally(() => setAuthLoading(false));
   }, []);
-  const loadData = async () => {
-    setLoading(true);
+
+  const isFetchingRef = useRef(false);
+
+  const loadData = async (options = {}) => {
+    const { showLoader = true } = options;
+    const userId = user?.id || user?._id;
+    const today = localDate();
+    const tomorrow = localDate(1);
+
+    if (userId) {
+      const cachedTodayTasks = getCache(
+        `focusday_cache_${userId}_tasks_${today}`,
+      );
+      const cachedTomorrowTasks = getCache(
+        `focusday_cache_${userId}_tasks_${tomorrow}`,
+      );
+      const cachedHabits = getCache(`focusday_cache_${userId}_habits_${today}`);
+      const cachedAnalytics = getCache(
+        `focusday_cache_${userId}_analytics_${today}`,
+      );
+
+      let hasCachedData = false;
+      if (cachedTodayTasks) {
+        setTasks(cachedTodayTasks);
+        hasCachedData = true;
+      }
+      if (cachedTomorrowTasks) {
+        setTomorrowTasks(cachedTomorrowTasks);
+        hasCachedData = true;
+      }
+      if (cachedHabits) {
+        setHabits(cachedHabits);
+        hasCachedData = true;
+      }
+      if (cachedAnalytics) {
+        setAnalytics(cachedAnalytics);
+        hasCachedData = true;
+      }
+
+      if (!hasCachedData && showLoader) {
+        setLoading(true);
+      }
+    } else if (showLoader) {
+      setLoading(true);
+    }
+
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
     try {
       const [todayTasks, nextTasks, habitDefinitions, records, analyticsData] =
         await Promise.all([
-          api(`/tasks/${localDate()}`),
-          api(`/tasks/${localDate(1)}`),
+          api(`/tasks/${today}`),
+          api(`/tasks/${tomorrow}`),
           api("/habits"),
-          api(`/habits/records/${localDate()}`),
+          api(`/habits/records/${today}`),
           api("/analytics"),
         ]);
+      const formattedHabits = sortHabits(habitDefinitions).map((habit) => {
+        const record = records.find(
+          (item) => String(item.habitId) === String(habit._id),
+        );
+        const actualValue = record?.actualValue ?? record?.value;
+        return {
+          ...habit,
+          value:
+            habit.type === "time"
+              ? normalizeTimeValue(actualValue)
+              : actualValue,
+          display: formatHabitValue(habit, actualValue),
+        };
+      });
+      const formattedAnalytics = sortAnalyticsHabits(analyticsData);
+
       setTasks(todayTasks);
       setTomorrowTasks(nextTasks);
-      setHabits(
-        sortHabits(habitDefinitions).map((habit) => {
-          const record = records.find(
-            (item) => String(item.habitId) === String(habit._id),
-          );
-          const actualValue = record?.actualValue ?? record?.value;
-          return {
-            ...habit,
-            value:
-              habit.type === "time"
-                ? normalizeTimeValue(actualValue)
-                : actualValue,
-            display: formatHabitValue(habit, actualValue),
-          };
-        }),
-      );
-      setAnalytics(sortAnalyticsHabits(analyticsData));
+      setHabits(formattedHabits);
+      setAnalytics(formattedAnalytics);
       setError("");
+
+      if (userId) {
+        setCache(`focusday_cache_${userId}_tasks_${today}`, todayTasks);
+        setCache(`focusday_cache_${userId}_tasks_${tomorrow}`, nextTasks);
+        setCache(`focusday_cache_${userId}_habits_${today}`, formattedHabits);
+        setCache(
+          `focusday_cache_${userId}_analytics_${today}`,
+          formattedAnalytics,
+        );
+      }
     } catch (err) {
       setError(err.message);
     } finally {
+      isFetchingRef.current = false;
       setLoading(false);
     }
   };
+
   useEffect(() => {
     if (user) loadData();
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const userId = user.id || user._id;
+    const handleStorage = (e) => {
+      if (e.key && e.key.startsWith(`focusday_cache_${userId}_`)) {
+        loadData({ showLoader: false });
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [user]);
+
   const addTodayTask = (task) => {
-    setTasks((current) => [...current, task]);
+    const userId = user?.id || user?._id;
+    setTasks((current) => {
+      const next = [...current, task];
+      if (userId)
+        setCache(`focusday_cache_${userId}_tasks_${localDate()}`, next);
+      return next;
+    });
+    if (userId)
+      removeCache(`focusday_cache_${userId}_analytics_${localDate()}`);
     setShowForm(false);
     setError("");
   };
+
   const addTomorrowTask = (task) => {
-    setTomorrowTasks((current) => [...current, task]);
+    const userId = user?.id || user?._id;
+    setTomorrowTasks((current) => {
+      const next = [...current, task];
+      if (userId)
+        setCache(`focusday_cache_${userId}_tasks_${localDate(1)}`, next);
+      return next;
+    });
     setError("");
   };
+
   const toggleTask = async (task) => {
     try {
       const updated = await api(`/tasks/${task._id}`, {
@@ -1111,25 +1233,64 @@ function App() {
           status: task.status === "completed" ? "pending" : "completed",
         }),
       });
-      setTasks((current) =>
-        current.map((item) => (item._id === updated._id ? updated : item)),
-      );
-      setTomorrowTasks((current) =>
-        current.map((item) => (item._id === updated._id ? updated : item)),
-      );
+      const userId = user?.id || user?._id;
+      setTasks((current) => {
+        const next = current.map((item) =>
+          item._id === updated._id ? updated : item,
+        );
+        if (userId)
+          setCache(`focusday_cache_${userId}_tasks_${localDate()}`, next);
+        return next;
+      });
+      setTomorrowTasks((current) => {
+        const next = current.map((item) =>
+          item._id === updated._id ? updated : item,
+        );
+        if (userId)
+          setCache(`focusday_cache_${userId}_tasks_${localDate(1)}`, next);
+        return next;
+      });
+      if (userId)
+        removeCache(`focusday_cache_${userId}_analytics_${localDate()}`);
+      api("/analytics")
+        .then((analyticsData) => {
+          const sorted = sortAnalyticsHabits(analyticsData);
+          setAnalytics(sorted);
+          if (userId)
+            setCache(
+              `focusday_cache_${userId}_analytics_${localDate()}`,
+              sorted,
+            );
+        })
+        .catch(() => {});
     } catch (err) {
       setError(err.message);
     }
   };
+
   const updateTask = (updated) => {
-    setTasks((current) =>
-      current.map((item) => (item._id === updated._id ? updated : item)),
-    );
-    setTomorrowTasks((current) =>
-      current.map((item) => (item._id === updated._id ? updated : item)),
-    );
+    const userId = user?.id || user?._id;
+    setTasks((current) => {
+      const next = current.map((item) =>
+        item._id === updated._id ? updated : item,
+      );
+      if (userId)
+        setCache(`focusday_cache_${userId}_tasks_${localDate()}`, next);
+      return next;
+    });
+    setTomorrowTasks((current) => {
+      const next = current.map((item) =>
+        item._id === updated._id ? updated : item,
+      );
+      if (userId)
+        setCache(`focusday_cache_${userId}_tasks_${localDate(1)}`, next);
+      return next;
+    });
+    if (userId)
+      removeCache(`focusday_cache_${userId}_analytics_${localDate()}`);
     setError("");
   };
+
   const recordHabit = async (habit, input) => {
     const actualValue =
       habit.type === "boolean"
@@ -1163,8 +1324,9 @@ function App() {
         habit.type === "time"
           ? normalizeTimeValue(rawSavedValue)
           : rawSavedValue;
-      setHabits((current) =>
-        current.map((item) =>
+      const userId = user?.id || user?._id;
+      setHabits((current) => {
+        const next = current.map((item) =>
           item._id === habit._id
             ? {
                 ...item,
@@ -1172,15 +1334,28 @@ function App() {
                 display: formatHabitValue(item, savedValue),
               }
             : item,
-        ),
-      );
-      setAnalytics(sortAnalyticsHabits(await api("/analytics")));
+        );
+        if (userId)
+          setCache(`focusday_cache_${userId}_habits_${localDate()}`, next);
+        return next;
+      });
+      const freshAnalytics = sortAnalyticsHabits(await api("/analytics"));
+      setAnalytics(freshAnalytics);
+      if (userId)
+        setCache(
+          `focusday_cache_${userId}_analytics_${localDate()}`,
+          freshAnalytics,
+        );
     } catch (err) {
       setError(err.message);
     }
   };
+
   const logout = () => {
+    const userId = user?.id || user?._id;
     clearToken();
+    if (userId) clearUserCache(userId);
+    removeCache("focusday_auth_user");
     setUser(null);
     setTasks([]);
     setTomorrowTasks([]);
