@@ -22,7 +22,10 @@ import {
 } from "lucide-react";
 import "./App.css";
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const rawApiUrl = (
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+).replace(/\/+$/, "");
+const API = rawApiUrl.endsWith("/api") ? rawApiUrl : `${rawApiUrl}/api`;
 const HABIT_ORDER = [
   "Wake up",
   "Water",
