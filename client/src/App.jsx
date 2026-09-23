@@ -289,6 +289,7 @@ function AuthScreen({ onAuth }) {
   const navigate = useNavigate();
   const [register, setRegister] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const submit = async (event) => {
     event.preventDefault();
@@ -850,6 +851,7 @@ function App() {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [currentDate, setCurrentDate] = useState(() => new Date());
+  const authRequestRef = useRef(0);
 
   useEffect(() => {
     let timerId;
@@ -885,6 +887,7 @@ function App() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, [user]);
   useEffect(() => {
+    const authRequestId = ++authRequestRef.current;
     const token = getToken();
     if (!token) {
       setAuthLoading(false);
@@ -897,6 +900,7 @@ function App() {
     }
     api("/auth/me")
       .then((data) => {
+        if (authRequestRef.current !== authRequestId) return;
         setUser(data.user);
         setCache("focusday_auth_user", data.user);
         if (initialPathRef.current === "/login") {
@@ -904,13 +908,16 @@ function App() {
         }
       })
       .catch((err) => {
+        if (authRequestRef.current !== authRequestId) return;
         if (err?.status === 401) {
           clearToken();
           removeCache("focusday_auth_user");
           setUser(null);
         }
       })
-      .finally(() => setAuthLoading(false));
+      .finally(() => {
+        if (authRequestRef.current === authRequestId) setAuthLoading(false);
+      });
   }, [navigate]);
 
   const isFetchingRef = useRef(false);
@@ -1196,10 +1203,14 @@ function App() {
 
   const logout = () => {
     const userId = user?.id || user?._id;
+    authRequestRef.current += 1;
     clearToken();
-    if (userId) clearUserCache(userId);
+    try {
+      if (userId) clearUserCache(userId);
+    } catch {}
     removeCache("focusday_auth_user");
     setUser(null);
+    setAuthLoading(false);
     setTasks([]);
     setTomorrowTasks([]);
     setHabits([]);
@@ -1213,7 +1224,10 @@ function App() {
         <div className="auth-mark">FocusDay</div>
       </main>
     );
-  if (!user) return <AuthScreen onAuth={setUser} />;
+  if (!user) {
+    if (location.pathname !== "/login") return <Navigate to="/login" replace />;
+    return <AuthScreen onAuth={setUser} />;
+  }
   const sharedPageProps = {
     TaskRow,
     TaskForm,

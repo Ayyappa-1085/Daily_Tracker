@@ -68,9 +68,33 @@ router.post('/', async (req, res) => {
 
 router.patch('/:id', async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid task id.' });
-  if (req.body.status && !['pending', 'completed'].includes(req.body.status)) return res.status(400).json({ message: 'Invalid task status.' });
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) return res.status(400).json({ message: 'Invalid task update.' });
+  const allowedFields = ['title', 'category', 'topic', 'estimatedMinutes', 'status'];
+  if (Object.keys(req.body).some((field) => !allowedFields.includes(field))) {
+    return res.status(400).json({ message: 'Only editable task fields can be updated.' });
+  }
+  const { title, category, topic, estimatedMinutes, status } = req.body;
+  if ('title' in req.body && (typeof title !== 'string' || !title.trim() || title.length > 120)) {
+    return res.status(400).json({ message: 'Invalid task title.' });
+  }
+  if ('category' in req.body && !['DSA', 'Study', 'Project', 'Personal', 'Other'].includes(category)) {
+    return res.status(400).json({ message: 'Invalid task category.' });
+  }
+  if ('topic' in req.body && (typeof topic !== 'string' || topic.length > 80)) {
+    return res.status(400).json({ message: 'Invalid task topic.' });
+  }
+  if ('estimatedMinutes' in req.body && (!Number.isInteger(estimatedMinutes) || estimatedMinutes < 1 || estimatedMinutes > 1440)) {
+    return res.status(400).json({ message: 'Invalid estimated time.' });
+  }
+  if ('status' in req.body && !['pending', 'completed'].includes(status)) {
+    return res.status(400).json({ message: 'Invalid task status.' });
+  }
+  const updates = {};
+  for (const field of allowedFields) {
+    if (field in req.body) updates[field] = req.body[field];
+  }
   try {
-    const task = await Task.findOneAndUpdate({ _id: req.params.id, userId: req.user._id }, { $set: req.body }, { returnDocument: 'after', runValidators: true });
+    const task = await Task.findOneAndUpdate({ _id: req.params.id, userId: req.user._id }, { $set: updates }, { returnDocument: 'after', runValidators: true });
     if (!task) return res.status(404).json({ message: 'Task not found.' });
     res.json(task);
   } catch (error) { console.error('Update task failed:', error); res.status(500).json({ message: 'Unable to update task.' }); }
