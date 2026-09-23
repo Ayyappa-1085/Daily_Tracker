@@ -5,7 +5,11 @@ const auth = require('../middleware/auth');
 const { ensureDefaults } = require('../utils/defaults');
 
 router.use(auth);
-router.get('/', async (req, res) => res.json(await ensureDefaults(req.user._id)));
+router.get('/', async (req, res) => {
+  const habits = await Habit.find({ userId: req.user._id }).sort({ _id: 1 });
+  if (habits.length > 0) return res.json(habits);
+  return res.json(await ensureDefaults(req.user._id));
+});
 const normalizeStoredTime = value => {
   if (typeof value === 'string') {
     const match = value.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);

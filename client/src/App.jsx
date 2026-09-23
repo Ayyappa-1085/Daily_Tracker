@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  BarChart3,
   BookOpen,
   CalendarDays,
   Check,
@@ -10,18 +9,30 @@ import {
   Code2,
   Droplets,
   Dumbbell,
-  Home,
   LockKeyhole,
-  LogOut,
   Sparkles,
   Tag,
   Target,
   TrendingUp,
-  X,
+  Utensils,
   Zap,
 } from "lucide-react";
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import "./App.css";
 import { clearUserCache, getCache, removeCache, setCache } from "./utils/cache";
+import Sidebar from "./components/Sidebar";
+import Header from "./components/Header";
+import TodayPage from "./components/Today";
+import PlanPage from "./components/Plan";
+import HabitsPage from "./components/Habits";
+import AnalyticsPage from "./components/Analytics";
+import Meals from "./components/Meals";
 
 const rawApiUrl = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
@@ -135,6 +146,7 @@ const formatHabitTarget = (habit) => {
   if (habit.unit === "liters") return `${habit.target} L`;
   if (habit.unit === "steps") return habit.target.toLocaleString();
   if (habit.unit === "pages") return `${habit.target} pages`;
+  if (habit.unit === "meals") return `${habit.target} meals`;
   if (habit.type === "boolean") return "Completed";
   return String(habit.target);
 };
@@ -146,6 +158,8 @@ const formatHabitValue = (habit, value) => {
   if (habit.unit === "liters") return `${value} L`;
   if (habit.unit === "steps") return value.toLocaleString();
   if (habit.unit === "pages") return `${value} pages`;
+  if (habit.unit === "meals")
+    return value ? `${value} / 5 completed` : "No data recorded";
   if (habit.unit === "boolean") return value ? "Completed" : "Not completed";
   return String(value);
 };
@@ -187,6 +201,7 @@ const habitSatisfied = (habit) => {
   return habit.value >= habit.target;
 };
 const TOKEN_KEY = "focusday-token";
+const DASHBOARD_PATHS = ["/today", "/plan", "/habits", "/analytics", "/meals"];
 const getToken = () => {
   try {
     return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
@@ -235,7 +250,9 @@ function api(path, options = {}) {
         ) {
           clearToken();
         }
-        throw new Error(data.message || "Unable to complete request.");
+        const error = new Error(data.message || "Unable to complete request.");
+        error.status = response.status;
+        throw error;
       }
       return data;
     })
@@ -262,16 +279,21 @@ function Icon({ name, size = 18 }) {
     reading: BookOpen,
     steps: TrendingUp,
     screen: Target,
+    meals: Utensils,
   };
   const Component = icons[name] || Target;
   return <Component size={size} strokeWidth={2.1} />;
 }
 function AuthScreen({ onAuth }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [register, setRegister] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
-  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const submit = async (event) => {
     event.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const data = await api(`/auth/${register ? "register" : "login"}`, {
         method: "POST",
@@ -279,15 +301,15 @@ function AuthScreen({ onAuth }) {
       });
       setToken(data.token);
       setCache("focusday_auth_user", data.user);
-      if (
-        typeof window !== "undefined" &&
-        window.location.pathname === "/login"
-      ) {
-        window.history.pushState({}, "", "/");
-      }
+      const nextPath = DASHBOARD_PATHS.includes(location.pathname)
+        ? location.pathname
+        : "/today";
+      navigate(nextPath, { replace: true });
       onAuth(data.user);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSubmitting(false);
     }
   };
   return (
@@ -337,8 +359,19 @@ function AuthScreen({ onAuth }) {
             />
           </label>
           {error && <p className="error-message">{error}</p>}
-          <button className="primary-button" type="submit">
-            {register ? "Create account" : "Sign in"} <ChevronRight size={17} />
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={submitting}
+          >
+            {submitting
+              ? register
+                ? "Creating account..."
+                : "Signing in..."
+              : register
+                ? "Create account"
+                : "Sign in"}{" "}
+            {!submitting && <ChevronRight size={17} />}
           </button>
         </form>
         <button
@@ -653,92 +686,6 @@ function TimeSelector({ value, onChange, label, habitKey }) {
     </div>
   );
 }
-function HabitRow({ habit, onRecord }) {
-  const [editing, setEditing] = useState(false);
-  const [input, setInput] = useState(
-    habit.type === "time" && habit.value !== undefined
-      ? toTimeInput(habit.value)
-      : (habit.value ?? ""),
-  );
-  const ratio =
-    habit.type === "range"
-      ? 0
-      : Math.min((habit.value || 0) / (habit.target || 1), 1);
-  const save = (event) => {
-    event.preventDefault();
-    onRecord(habit, input);
-    setEditing(false);
-  };
-  return (
-    <div className="habit-row measurable-habit">
-      <span className="habit-icon" style={{ color: habit.color }}>
-        <Icon name={habit.key} />
-      </span>
-      <div className="habit-name">
-        <strong>{habit.name}</strong>
-        <small>Target: {formatHabitTarget(habit)}</small>
-      </div>
-      <div className="habit-measure">
-        <span>{habit.display}</span>
-        {habit.value !== undefined &&
-          habit.value !== null &&
-          habitStatus(habit, habit.value) && (
-            <small className="habit-status">
-              {habitStatus(habit, habit.value)}
-            </small>
-          )}
-        {habit.type !== "time" &&
-          habit.type !== "boolean" &&
-          habit.type !== "range" && (
-            <div className="progress">
-              <i
-                style={{ width: `${ratio * 100}%`, background: habit.color }}
-              />
-            </div>
-          )}
-      </div>
-      {habit.type === "boolean" ? (
-        <button
-          className="habit-action"
-          onClick={() => onRecord(habit, habit.value ? false : true)}
-        >
-          {habit.value ? "Completed" : "Mark completed"}
-        </button>
-      ) : (
-        <button className="habit-action" onClick={() => setEditing(!editing)}>
-          {habit.value === undefined ? "Enter value" : "Edit"}
-        </button>
-      )}
-      {editing && (
-        <form className="habit-entry" onSubmit={save}>
-          {habit.type === "time" ? (
-            <TimeSelector
-              value={input}
-              onChange={setInput}
-              label={`${habit.name} actual value`}
-              habitKey={habit.key}
-            />
-          ) : (
-            <input
-              autoFocus
-              type="number"
-              min="0"
-              step={habit.unit === "liters" ? "0.1" : "1"}
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              aria-label={`${habit.name} actual value`}
-            />
-          )}
-          <span>{habit.type === "time" ? "" : habit.unit}</span>
-          <button className="primary-button" type="submit">
-            Save
-          </button>
-        </form>
-      )}
-    </div>
-  );
-}
-
 function HabitSummary({ habit }) {
   const hasValue = habit.display !== "No data recorded";
   const status = hasValue ? habitStatus(habit, habit.value) : "";
@@ -888,113 +835,21 @@ function HabitEntryRow({ habit, onRecord }) {
   );
 }
 
-function ProfilePopover({ user, onLogout, className = "" }) {
-  const initial = user?.name ? user.name.trim().charAt(0).toUpperCase() : "U";
-  return (
-    <div
-      className={`profile-popover ${className}`}
-      role="dialog"
-      aria-label="User profile details"
-    >
-      <div className="popover-profile-header">
-        <div className="popover-avatar" aria-hidden="true">
-          {initial}
-        </div>
-        <div className="popover-user-details">
-          <strong className="popover-name" title={user?.name}>
-            {user?.name}
-          </strong>
-          <span className="popover-email" title={user?.email}>
-            {user?.email}
-          </span>
-        </div>
-      </div>
-      <div className="popover-divider" />
-      <button
-        type="button"
-        className="popover-logout-btn"
-        onClick={(e) => {
-          e.stopPropagation();
-          onLogout();
-        }}
-      >
-        <LogOut size={14} />
-        <span>Logout</span>
-      </button>
-    </div>
-  );
-}
-
-function SettingsView({ user }) {
-  return (
-    <div className="page narrow-page">
-      <div className="page-title">
-        <span className="eyebrow">PREFERENCES</span>
-        <h1>Settings</h1>
-        <p>Manage your account settings and preferences.</p>
-      </div>
-      <div className="panel" style={{ padding: "20px" }}>
-        <div className="panel-heading">
-          <h2>Account Details</h2>
-        </div>
-        <div
-          style={{
-            display: "grid",
-            gap: "14px",
-            marginTop: "12px",
-            fontSize: "13px",
-          }}
-        >
-          <div>
-            <span
-              style={{
-                color: "var(--muted)",
-                fontSize: "11px",
-                display: "block",
-                marginBottom: "4px",
-              }}
-            >
-              Full Name
-            </span>
-            <strong style={{ color: "var(--ink)", fontSize: "14px" }}>
-              {user?.name}
-            </strong>
-          </div>
-          <div style={{ borderTop: "1px solid #eff2f6", paddingTop: "12px" }}>
-            <span
-              style={{
-                color: "var(--muted)",
-                fontSize: "11px",
-                display: "block",
-                marginBottom: "4px",
-              }}
-            >
-              Email Address
-            </span>
-            <strong style={{ color: "var(--ink)", fontSize: "14px" }}>
-              {user?.email}
-            </strong>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const initialPathRef = useRef(location.pathname);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [view, setView] = useState("Today");
   const [tasks, setTasks] = useState([]);
   const [tomorrowTasks, setTomorrowTasks] = useState([]);
   const [habits, setHabits] = useState([]);
+  const [todayMeals, setTodayMeals] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [profileAnchor, setProfileAnchor] = useState(null);
   const [currentDate, setCurrentDate] = useState(() => new Date());
-  const topbarProfileRef = useRef(null);
 
   useEffect(() => {
     let timerId;
@@ -1018,35 +873,6 @@ function App() {
     scheduleMidnightUpdate();
     return () => clearTimeout(timerId);
   }, []);
-
-  useEffect(() => {
-    if (!profileAnchor) return;
-    const handleOutsideClick = (event) => {
-      if (
-        topbarProfileRef.current &&
-        !topbarProfileRef.current.contains(event.target)
-      ) {
-        setProfileAnchor(null);
-      }
-    };
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape") {
-        setProfileAnchor(null);
-      }
-    };
-    document.addEventListener("mousedown", handleOutsideClick);
-    document.addEventListener("touchstart", handleOutsideClick);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
-      document.removeEventListener("touchstart", handleOutsideClick);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [profileAnchor]);
-
-  useEffect(() => {
-    setProfileAnchor(null);
-  }, [view]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -1073,20 +899,19 @@ function App() {
       .then((data) => {
         setUser(data.user);
         setCache("focusday_auth_user", data.user);
-        if (
-          typeof window !== "undefined" &&
-          window.location.pathname === "/login"
-        ) {
-          window.history.replaceState({}, "", "/");
+        if (initialPathRef.current === "/login") {
+          navigate("/today", { replace: true });
         }
       })
-      .catch(() => {
-        clearToken();
-        removeCache("focusday_auth_user");
-        setUser(null);
+      .catch((err) => {
+        if (err?.status === 401) {
+          clearToken();
+          removeCache("focusday_auth_user");
+          setUser(null);
+        }
       })
       .finally(() => setAuthLoading(false));
-  }, []);
+  }, [navigate]);
 
   const isFetchingRef = useRef(false);
 
@@ -1107,6 +932,9 @@ function App() {
       const cachedAnalytics = getCache(
         `focusday_cache_${userId}_analytics_${today}`,
       );
+      const cachedTodayMeals = getCache(
+        `focusday_cache_${userId}_meals_${today}`,
+      );
 
       let hasCachedData = false;
       if (cachedTodayTasks) {
@@ -1125,6 +953,10 @@ function App() {
         setAnalytics(cachedAnalytics);
         hasCachedData = true;
       }
+      if (cachedTodayMeals) {
+        setTodayMeals(cachedTodayMeals);
+        hasCachedData = true;
+      }
 
       if (!hasCachedData && showLoader) {
         setLoading(true);
@@ -1137,14 +969,21 @@ function App() {
     isFetchingRef.current = true;
 
     try {
-      const [todayTasks, nextTasks, habitDefinitions, records, analyticsData] =
-        await Promise.all([
-          api(`/tasks/${today}`),
-          api(`/tasks/${tomorrow}`),
-          api("/habits"),
-          api(`/habits/records/${today}`),
-          api("/analytics"),
-        ]);
+      const [
+        todayTasks,
+        nextTasks,
+        habitDefinitions,
+        records,
+        analyticsData,
+        mealsData,
+      ] = await Promise.all([
+        api(`/tasks/${today}`),
+        api(`/tasks/${tomorrow}`),
+        api("/habits"),
+        api(`/habits/records/${today}`),
+        api("/analytics"),
+        api(`/meals?date=${today}`).catch(() => []),
+      ]);
       const formattedHabits = sortHabits(habitDefinitions).map((habit) => {
         const record = records.find(
           (item) => String(item.habitId) === String(habit._id),
@@ -1165,6 +1004,7 @@ function App() {
       setTomorrowTasks(nextTasks);
       setHabits(formattedHabits);
       setAnalytics(formattedAnalytics);
+      if (Array.isArray(mealsData)) setTodayMeals(mealsData);
       setError("");
 
       if (userId) {
@@ -1175,6 +1015,9 @@ function App() {
           `focusday_cache_${userId}_analytics_${today}`,
           formattedAnalytics,
         );
+        if (Array.isArray(mealsData)) {
+          setCache(`focusday_cache_${userId}_meals_${today}`, mealsData);
+        }
       }
     } catch (err) {
       setError(err.message);
@@ -1360,11 +1203,9 @@ function App() {
     setTasks([]);
     setTomorrowTasks([]);
     setHabits([]);
+    setTodayMeals([]);
     setAnalytics(null);
-    setProfileAnchor(null);
-    if (typeof window !== "undefined") {
-      window.history.pushState({}, "", "/login");
-    }
+    navigate("/login", { replace: true });
   };
   if (authLoading)
     return (
@@ -1373,122 +1214,114 @@ function App() {
       </main>
     );
   if (!user) return <AuthScreen onAuth={setUser} />;
-  const navItems = [
-    { label: "Today", icon: Home },
-    { label: "Plan", icon: CalendarDays },
-    { label: "Habits", icon: Target },
-    { label: "Analytics", icon: BarChart3 },
-  ];
+  const sharedPageProps = {
+    TaskRow,
+    TaskForm,
+    HabitSummary,
+    Comparison,
+    ThisWeekCard,
+    WeekComparisonCard,
+    localDate,
+    habitSatisfied,
+    CalendarDays,
+    Zap,
+    LockKeyhole,
+    user,
+    api,
+  };
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">FocusDay</div>
-        <nav>
-          {navItems.map(({ label, icon: NavIcon }) => (
-            <button
-              key={label}
-              className={view === label ? "active" : ""}
-              onClick={() => {
-                setView(label);
-                setProfileAnchor(null);
-              }}
-            >
-              <NavIcon size={18} />
-              {label}
-            </button>
-          ))}
-        </nav>
-      </aside>
+      <Sidebar
+        pathname={location.pathname}
+        navigate={navigate}
+        onNavigate={() => {}}
+      />
       <main className="main">
-        <header className="topbar">
-          <div className="topbar-brand">FocusDay</div>
-          <div className="topbar-right">
-            <span className="topbar-date">
-              {new Intl.DateTimeFormat("en-US", {
-                weekday: "short",
-                day: "numeric",
-                month: "short",
-              }).format(currentDate)}
-            </span>
-            <div className="topbar-profile-container" ref={topbarProfileRef}>
-              <button
-                type="button"
-                className={`profile-button ${profileAnchor === "topbar" ? "active" : ""}`}
-                onClick={() =>
-                  setProfileAnchor((current) =>
-                    current === "topbar" ? null : "topbar",
-                  )
-                }
-                aria-expanded={profileAnchor === "topbar"}
-                aria-label="User profile"
-              >
-                <CircleUserRound size={20} />
-                <span className="topbar-user-name">{user.name}</span>
-              </button>
-              {profileAnchor === "topbar" && (
-                <ProfilePopover
-                  user={user}
-                  onLogout={logout}
-                  className="topbar-popover"
-                />
-              )}
-            </div>
-          </div>
-        </header>
-        {error && (
-          <div className="toast">
-            {error}
-            <button onClick={() => setError("")}>
-              <X size={15} />
-            </button>
-          </div>
-        )}
-        {view === "Today" && (
-          <Today
-            tasks={tasks}
-            tomorrowTasks={tomorrowTasks}
-            addTomorrowTask={addTomorrowTask}
-            habits={habits}
-            analytics={analytics}
-            loading={loading}
-            showForm={showForm}
-            setShowForm={setShowForm}
-            addTask={addTodayTask}
-            toggleTask={toggleTask}
-            updateTask={updateTask}
-            recordHabit={recordHabit}
+        <Header
+          pathname={location.pathname}
+          user={user}
+          currentDate={currentDate}
+          onLogout={logout}
+          error={error}
+          onClearError={() => setError("")}
+        />
+        <Routes>
+          <Route
+            path="/today"
+            element={
+              <TodayPage
+                {...sharedPageProps}
+                tasks={tasks}
+                tomorrowTasks={tomorrowTasks}
+                addTomorrowTask={addTomorrowTask}
+                habits={habits}
+                analytics={analytics}
+                meals={todayMeals}
+                user={user}
+                api={api}
+                loading={loading}
+                showForm={showForm}
+                setShowForm={setShowForm}
+                addTask={addTodayTask}
+                toggleTask={toggleTask}
+                updateTask={updateTask}
+                recordHabit={recordHabit}
+              />
+            }
           />
-        )}
-        {view === "Plan" && (
-          <Plan
-            todayTasks={tasks}
-            tasks={tomorrowTasks}
-            addTask={addTomorrowTask}
-            updateTask={updateTask}
-            toggleTask={toggleTask}
+          <Route
+            path="/plan"
+            element={
+              <PlanPage
+                {...sharedPageProps}
+                todayTasks={tasks}
+                tasks={tomorrowTasks}
+                addTask={addTomorrowTask}
+                updateTask={updateTask}
+                toggleTask={toggleTask}
+              />
+            }
           />
-        )}
-        {view === "Habits" && (
-          <Habits habits={habits} recordHabit={recordHabit} />
-        )}
-        {view === "Analytics" && <Analytics data={analytics} />}
-        {view === "Settings" && <SettingsView user={user} />}
+          <Route
+            path="/habits"
+            element={
+              <HabitsPage
+                habits={habits}
+                recordHabit={recordHabit}
+                HabitEntryRow={HabitEntryRow}
+                meals={todayMeals}
+                user={user}
+                api={api}
+                localDate={localDate}
+              />
+            }
+          />
+          <Route
+            path="/meals"
+            element={
+              <Meals
+                user={user}
+                setError={setError}
+                api={api}
+                localDate={localDate}
+              />
+            }
+          />
+          <Route
+            path="/analytics"
+            element={
+              <AnalyticsPage
+                data={analytics}
+                Comparison={Comparison}
+                ThisWeekCard={ThisWeekCard}
+                WeekComparisonCard={WeekComparisonCard}
+                formatMinutes={formatMinutes}
+              />
+            }
+          />
+          <Route path="*" element={<Navigate to="/today" replace />} />
+        </Routes>
       </main>
-      <nav className="mobile-nav">
-        {navItems.map(({ label, icon: NavIcon }) => (
-          <button
-            key={label}
-            className={view === label ? "active" : ""}
-            onClick={() => {
-              setView(label);
-              setProfileAnchor(null);
-            }}
-          >
-            <NavIcon size={17} />
-            <span>{label}</span>
-          </button>
-        ))}
-      </nav>
     </div>
   );
 }
@@ -1710,493 +1543,6 @@ function WeekComparisonCard({ current, previous }) {
           );
         })}
     </section>
-  );
-}
-function Today({
-  tasks,
-  tomorrowTasks = [],
-  addTomorrowTask,
-  habits,
-  analytics,
-  loading,
-  showForm,
-  setShowForm,
-  addTask,
-  toggleTask,
-  updateTask,
-  recordHabit,
-}) {
-  const completed = tasks.filter((task) => task.status === "completed").length;
-  const unfinished = tasks.filter((task) => task.status === "pending").length;
-  const maxTomorrowSlots = Math.min(completed, 3 - unfinished);
-  const availableTomorrowSlots = Math.max(
-    0,
-    maxTomorrowSlots - tomorrowTasks.length,
-  );
-  const [showTomorrowForm, setShowTomorrowForm] = useState(false);
-
-  return (
-    <div className="page">
-      <div className="welcome">
-        <div>
-          <p className="eyebrow">TODAY</p>
-          <h1>Good morning!</h1>
-          <p>Stay consistent. Small steps make a big difference.</p>
-        </div>
-        <div className="quote">“Discipline today, a better tomorrow.”</div>
-      </div>
-      <div className="dashboard-grid">
-        <section className="panel ref-card tasks-panel">
-          <div className="ref-card-header">
-            <h2 className="ref-card-title">Today's Tasks</h2>
-            <span className="ref-card-counter">{completed} / 3 completed</span>
-          </div>
-
-          <div className="ref-card-body">
-            {loading ? (
-              <p className="empty-state">Loading today's tasks...</p>
-            ) : tasks.length ? (
-              <div className="ref-task-list">
-                {tasks.map((task) => (
-                  <TaskRow
-                    key={task._id}
-                    task={task}
-                    onToggle={toggleTask}
-                    onSaved={updateTask}
-                    isTomorrow={false}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="ref-empty-box">
-                <p>No tasks planned for today.</p>
-                <small>Add up to 3 tasks to get started.</small>
-              </div>
-            )}
-
-            {tasks.length < 3 &&
-              (showForm ? (
-                <TaskForm
-                  date={localDate()}
-                  placeholder="What matters today?"
-                  onSaved={addTask}
-                  onCancel={() => setShowForm(false)}
-                />
-              ) : (
-                <button
-                  type="button"
-                  className="btn-add-task-dark"
-                  onClick={() => setShowForm(true)}
-                >
-                  + Add a task (max {3 - tasks.length})
-                </button>
-              ))}
-          </div>
-
-          <div className="task-progress-card">
-            <div className="progress-ring-wrap">
-              <svg
-                width="40"
-                height="40"
-                viewBox="0 0 40 40"
-                className="progress-ring"
-              >
-                <g transform="rotate(-90 20 20)">
-                  <circle
-                    className="progress-ring-track"
-                    cx="20"
-                    cy="20"
-                    r={15}
-                  />
-                  <circle
-                    className="progress-ring-fill"
-                    cx="20"
-                    cy="20"
-                    r={15}
-                    strokeDasharray={2 * Math.PI * 15}
-                    strokeDashoffset={
-                      2 * Math.PI * 15 * (1 - Math.min(completed, 3) / 3)
-                    }
-                  />
-                </g>
-                <text
-                  x="20"
-                  y="24"
-                  textAnchor="middle"
-                  className="progress-ring-text"
-                >
-                  {completed}/3
-                </text>
-              </svg>
-            </div>
-            <div className="task-progress-info">
-              <strong>
-                {3 - completed === 0
-                  ? "All tasks completed!"
-                  : `${3 - completed} task${3 - completed === 1 ? "" : "s"} remaining`}
-              </strong>
-              <div className="task-progress-bar-track">
-                <div
-                  className="task-progress-bar-fill"
-                  style={{ width: `${(Math.min(completed, 3) / 3) * 100}%` }}
-                />
-              </div>
-            </div>
-            <div className="task-progress-right-icon">
-              <CalendarDays size={20} color="#334155" strokeWidth={1.7} />
-            </div>
-          </div>
-        </section>
-
-        <section className="panel ref-card tomorrow-panel">
-          <div className="ref-card-header">
-            <h2 className="ref-card-title">Tomorrow</h2>
-            <span className="ref-card-counter">
-              {availableTomorrowSlots} / 3 slots available
-            </span>
-          </div>
-
-          <div className="tomorrow-unlock-header">
-            <div className="tomorrow-unlock-title-row">
-              <span className="tomorrow-unlock-count">
-                {completed} tomorrow slot{completed === 1 ? "" : "s"} unlocked.
-              </span>
-              <span className="tomorrow-slot-pill">
-                <Zap size={11} fill="#2563eb" color="#2563eb" />
-                <span>{availableTomorrowSlots} / 3 slots available</span>
-              </span>
-            </div>
-            <div className="tomorrow-segments">
-              {[0, 1, 2].map((idx) => (
-                <div
-                  key={idx}
-                  className={`tomorrow-segment ${idx < completed ? "filled" : ""}`}
-                />
-              ))}
-            </div>
-          </div>
-
-          {completed === 0 ? (
-            <div className="ref-tomorrow-locked">
-              <LockKeyhole size={28} color="#64748b" strokeWidth={1.8} />
-              <strong>Tomorrow is locked</strong>
-              <span>Complete today's tasks to unlock tomorrow's planning.</span>
-            </div>
-          ) : (
-            <div className="ref-card-body">
-              {tomorrowTasks.length > 0 ? (
-                <div className="ref-task-list">
-                  {tomorrowTasks.map((task) => (
-                    <TaskRow
-                      key={task._id}
-                      task={task}
-                      onToggle={toggleTask}
-                      onSaved={updateTask}
-                      isTomorrow={true}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="ref-empty-box">
-                  <p>No tasks planned for tomorrow yet.</p>
-                </div>
-              )}
-
-              {availableTomorrowSlots > 0 &&
-                (showTomorrowForm ? (
-                  <TaskForm
-                    date={localDate(1)}
-                    placeholder="What do you want to do tomorrow?"
-                    onSaved={(task) => {
-                      addTomorrowTask(task);
-                      setShowTomorrowForm(false);
-                    }}
-                    onCancel={() => setShowTomorrowForm(false)}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="btn-add-task-dashed"
-                    onClick={() => setShowTomorrowForm(true)}
-                  >
-                    + Add a task (max {availableTomorrowSlots})
-                  </button>
-                ))}
-            </div>
-          )}
-
-          <div className="tomorrow-carryover-notice">
-            <div className="carryover-icon-box">
-              <CalendarDays size={20} color="#334155" strokeWidth={1.7} />
-            </div>
-            <div className="carryover-text">
-              <strong>Tomorrow's tasks will never exceed 3 tasks</strong>
-              <span>
-                Unfinished tasks from today will carry over automatically.
-              </span>
-            </div>
-          </div>
-        </section>
-
-        <section className="panel habits-panel">
-          <div className="panel-heading">
-            <h2>Today's Habits</h2>
-            <span>
-              {habits.filter(habitSatisfied).length} / {habits.length}
-            </span>
-          </div>
-          {habits.length ? (
-            habits.map((habit) => (
-              <HabitSummary key={habit._id} habit={habit} />
-            ))
-          ) : (
-            <p className="empty-state">No habits available.</p>
-          )}
-        </section>
-      </div>
-
-      <div className="dashboard-analytics-grid">
-        <Comparison data={analytics} />
-        <ThisWeekCard summary={analytics?.currentWeek} />
-        <WeekComparisonCard
-          current={analytics?.currentWeek}
-          previous={analytics?.previousWeek}
-        />
-      </div>
-    </div>
-  );
-}
-function Plan({
-  todayTasks = [],
-  tasks = [],
-  addTask,
-  updateTask,
-  toggleTask,
-}) {
-  const [showForm, setShowForm] = useState(false);
-  const todayCompleted = todayTasks.filter(
-    (t) => t.status === "completed",
-  ).length;
-  const todayUnfinished = todayTasks.filter(
-    (t) => t.status === "pending",
-  ).length;
-  const maxTomorrowSlots = Math.min(todayCompleted, 3 - todayUnfinished);
-  const availableSlots = Math.max(0, maxTomorrowSlots - tasks.length);
-
-  return (
-    <div className="page narrow-page">
-      <div className="page-title">
-        <span className="eyebrow">PLANNING</span>
-        <h1>Plan tomorrow</h1>
-        <p>Choose the few things that deserve your attention next.</p>
-      </div>
-      <section className="panel ref-card plan-panel">
-        <div className="ref-card-header">
-          <h2 className="ref-card-title">Tomorrow</h2>
-          <span className="ref-card-counter">
-            {availableSlots} / 3 slots available
-          </span>
-        </div>
-
-        <div className="tomorrow-unlock-header">
-          <div className="tomorrow-unlock-title-row">
-            <span className="tomorrow-unlock-count">
-              {todayCompleted} tomorrow slot{todayCompleted === 1 ? "" : "s"}{" "}
-              unlocked.
-            </span>
-            <span className="tomorrow-slot-pill">
-              <Zap size={11} fill="#2563eb" color="#2563eb" />
-              <span>{availableSlots} / 3 slots available</span>
-            </span>
-          </div>
-          <div className="tomorrow-segments">
-            {[0, 1, 2].map((idx) => (
-              <div
-                key={idx}
-                className={`tomorrow-segment ${idx < todayCompleted ? "filled" : ""}`}
-              />
-            ))}
-          </div>
-        </div>
-
-        {todayCompleted === 0 ? (
-          <div className="ref-tomorrow-locked">
-            <LockKeyhole size={28} color="#64748b" strokeWidth={1.8} />
-            <strong>Tomorrow is locked</strong>
-            <span>Complete today's tasks to unlock tomorrow's planning.</span>
-          </div>
-        ) : (
-          <div className="ref-card-body">
-            {tasks.length > 0 ? (
-              <div className="ref-task-list">
-                {tasks.map((task) => (
-                  <TaskRow
-                    key={task._id}
-                    task={task}
-                    onToggle={toggleTask}
-                    onSaved={updateTask}
-                    isTomorrow={true}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="ref-empty-box">
-                <p>No tasks planned for tomorrow yet.</p>
-              </div>
-            )}
-
-            {availableSlots > 0 &&
-              (showForm ? (
-                <TaskForm
-                  date={localDate(1)}
-                  placeholder="What do you want to do tomorrow?"
-                  onSaved={(task) => {
-                    addTask(task);
-                    setShowForm(false);
-                  }}
-                  onCancel={() => setShowForm(false)}
-                />
-              ) : (
-                <button
-                  type="button"
-                  className="btn-add-task-dashed"
-                  onClick={() => setShowForm(true)}
-                >
-                  + Add a task (max {availableSlots})
-                </button>
-              ))}
-          </div>
-        )}
-
-        <div className="tomorrow-carryover-notice">
-          <div className="carryover-icon-box">
-            <CalendarDays size={20} color="#334155" strokeWidth={1.7} />
-          </div>
-          <div className="carryover-text">
-            <strong>Tomorrow's total will never exceed 3 tasks</strong>
-            <span>
-              Unfinished tasks from today will carry over automatically.
-            </span>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-function Habits({ habits, recordHabit }) {
-  return (
-    <div className="page habits-page">
-      <div className="page-title">
-        <span className="eyebrow">MEASURE WHAT MATTERS</span>
-        <h1>Habits</h1>
-        <p>Small records add up to a useful picture of your day.</p>
-      </div>
-      <section className="panel habits-list">
-        {habits.length ? (
-          habits.map((habit) => (
-            <HabitEntryRow
-              key={habit._id}
-              habit={habit}
-              onRecord={recordHabit}
-            />
-          ))
-        ) : (
-          <p className="empty-state">No habits available.</p>
-        )}
-      </section>
-    </div>
-  );
-}
-function Analytics({ data }) {
-  if (!data)
-    return (
-      <div className="page narrow-page">
-        <div className="page-title">
-          <span className="eyebrow">A CLEARER PICTURE</span>
-          <h1>Analytics</h1>
-          <p>Notice what improved, what slipped, and where your time went.</p>
-        </div>
-        <section className="panel empty-panel">
-          Not enough data yet.
-          <br />
-          Keep tracking to see your progress.
-        </section>
-      </div>
-    );
-  const categories = Object.entries(data.categories);
-  const consistency = data.consistency || [];
-  const time = Object.entries(data.time);
-  return (
-    <div className="page">
-      <div className="page-title">
-        <span className="eyebrow">A CLEARER PICTURE</span>
-        <h1>Analytics</h1>
-        <p>Notice what improved, what slipped, and where your time went.</p>
-      </div>
-      <div className="analytics-grid">
-        <Comparison data={data} />
-        <ThisWeekCard summary={data.currentWeek} />
-        <WeekComparisonCard
-          current={data.currentWeek}
-          previous={data.previousWeek}
-        />
-        <section className="panel analytics-card">
-          <div className="panel-heading">
-            <h2>Task categories</h2>
-          </div>
-          {categories.length ? (
-            categories.map(([label, value]) => (
-              <div className="category-row" key={label}>
-                <span>{label}</span>
-                <strong>{value}</strong>
-                <div className="category-bar">
-                  <i style={{ width: `${Math.min(value * 25, 100)}%` }} />
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="empty-state">No completed tasks yet.</p>
-          )}
-          <div className="carried">
-            <strong>Carried over</strong>
-            <span>{data.carried} tasks</span>
-          </div>
-        </section>
-        <section className="panel analytics-card">
-          <div className="panel-heading">
-            <h2>Habit consistency</h2>
-          </div>
-          {consistency.length ? (
-            consistency.map((item) => (
-              <div className="consistency-row" key={item.key}>
-                <span>{item.name}</span>
-                <strong>{item.days} / 7</strong>
-                <div className="progress">
-                  <i style={{ width: `${(item.days / 7) * 100}%` }} />
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="empty-state">No habit records yet.</p>
-          )}
-        </section>
-        <section className="panel analytics-card">
-          <div className="panel-heading">
-            <h2>Recorded time</h2>
-          </div>
-          {time.length ? (
-            time.map(([label, value]) => (
-              <div className="time-row" key={label}>
-                <span>{label}</span>
-                <strong>{formatMinutes(value)}</strong>
-              </div>
-            ))
-          ) : (
-            <p className="empty-state">No completed task time yet.</p>
-          )}
-        </section>
-      </div>
-    </div>
   );
 }
 export default App;

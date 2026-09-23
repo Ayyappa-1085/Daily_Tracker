@@ -2,6 +2,7 @@ const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Habit = require('../models/Habit');
 const auth = require('../middleware/auth');
 const { ensureDefaults } = require('../utils/defaults');
 
@@ -22,7 +23,6 @@ router.post('/login', async (req, res) => {
   try {
     const user = await User.findOne({ email: req.body.email?.toLowerCase() });
     if (!user || !(await bcrypt.compare(req.body.password || '', user.passwordHash))) return res.status(401).json({ message: 'Invalid email or password.' });
-    await ensureDefaults(user._id);
     res.json({ token: tokenFor(user), user: { id: user._id, name: user.name, email: user.email } });
   } catch { res.status(500).json({ message: 'Unable to sign in.' }); }
 });

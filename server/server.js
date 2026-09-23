@@ -43,6 +43,8 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/habits', require('./routes/habits'));
 app.use('/api/analytics', require('./routes/analytics'));
+app.use('/api/meals', require('./routes/meals'));
+app.use('/api/weight', require('./routes/weight'));
 
 app.use((error, req, res, next) =>
   res.status(500).json({ message: 'Something went wrong.' })

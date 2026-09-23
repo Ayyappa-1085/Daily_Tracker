@@ -3,7 +3,6 @@ const Task = require('../models/Task');
 const Habit = require('../models/Habit');
 const HabitRecord = require('../models/HabitRecord');
 const auth = require('../middleware/auth');
-const { ensureDefaults } = require('../utils/defaults');
 
 const localDate = (offset = 0) => {
   const date = new Date();
@@ -81,7 +80,7 @@ router.get('/', async (req, res) => {
     const previousWeekEnd = localDate(weekOffset() - 1);
     const [tasks, habits, records] = await Promise.all([
       Task.find({ userId: req.user._id }).lean(),
-      ensureDefaults(req.user._id),
+      Habit.find({ userId: req.user._id }).lean(),
       HabitRecord.find({ userId: req.user._id }).lean(),
     ]);
     const tasksFor = date => tasks.filter(task => task.date === date);
