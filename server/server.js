@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 
+app.set('trust proxy', 1);
 app.use(helmet());
 const clientUrls = (process.env.CLIENT_URL || '')
   .split(',')
@@ -34,11 +35,19 @@ app.use(
   })
 );
 app.use(express.json({ limit: '20kb' }));
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 300 }));
+const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false });
+const authAttemptLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, skipSuccessfulRequests: true, standardHeaders: true, legacyHeaders: false });
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
+app.use('/api/auth/login', authAttemptLimiter);
+app.use('/api/auth/register', authAttemptLimiter);
+app.use('/api/tasks', apiLimiter);
+app.use('/api/habits', apiLimiter);
+app.use('/api/analytics', apiLimiter);
+app.use('/api/meals', apiLimiter);
+app.use('/api/weight', apiLimiter);
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/habits', require('./routes/habits'));
