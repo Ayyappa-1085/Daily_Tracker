@@ -26,10 +26,10 @@ import {
 } from "react-router-dom";
 import "./App.css";
 import { clearUserCache, getCache, removeCache, setCache } from "./utils/cache";
+import { mutationQueue } from "./utils/mutationQueue";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import TodayPage from "./components/Today";
-import PlanPage from "./components/Plan";
 import HabitsPage from "./components/Habits";
 import AnalyticsPage from "./components/Analytics";
 import Meals from "./components/Meals";
@@ -201,7 +201,7 @@ const habitSatisfied = (habit) => {
   return habit.value >= habit.target;
 };
 const TOKEN_KEY = "focusday-token";
-const DASHBOARD_PATHS = ["/today", "/plan", "/habits", "/analytics", "/meals"];
+const DASHBOARD_PATHS = ["/today", "/habits", "/analytics", "/meals"];
 const getToken = () => {
   try {
     return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
@@ -418,24 +418,27 @@ function TaskForm({
     unit: "minutes",
   });
   const [error, setError] = useState("");
-  const submit = async (event) => {
+  const submit = (event) => {
     event.preventDefault();
-    try {
-      const task = await api("/tasks", {
-        method: "POST",
-        body: JSON.stringify({
-          date,
-          title: form.title,
-          category: form.category,
-          topic: form.topic,
-          estimatedMinutes:
-            Number(form.amount) * (form.unit === "hours" ? 60 : 1),
-        }),
-      });
-      onSaved(task);
-    } catch (err) {
-      setError(err.message);
+    const title = form.title.trim();
+    if (!title) {
+      setError("Enter a valid title.");
+      return;
     }
+    const estimatedMinutes =
+      Number(form.amount) * (form.unit === "hours" ? 60 : 1);
+    if (!Number.isInteger(estimatedMinutes) || estimatedMinutes < 1) {
+      setError("Enter a valid estimated time.");
+      return;
+    }
+    setError("");
+    onSaved({
+      date,
+      title,
+      category: form.category,
+      topic: form.topic?.trim() || "",
+      estimatedMinutes,
+    });
   };
   return (
     <form className="ref-task-form" onSubmit={submit}>
@@ -498,23 +501,52 @@ function TaskEditor({ task, onSaved, onCancel }) {
         : "minutes",
   });
   const [error, setError] = useState("");
-  const submit = async (event) => {
+  const submit = (event) => {
     event.preventDefault();
-    try {
-      const updated = await api(`/tasks/${task._id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          title: form.title,
-          category: form.category,
-          topic: form.topic,
-          estimatedMinutes:
-            Number(form.amount) * (form.unit === "hours" ? 60 : 1),
-        }),
-      });
-      onSaved(updated);
-    } catch (err) {
-      setError(err.message);
+    const title = form.title.trim();
+    if (!title) {
+      setError("Enter a valid task title.");
+      return;
     }
+    const estimatedMinutes =
+      Number(form.amount) * (form.unit === "hours" ? 60 : 1);
+    if (!Number.isInteger(estimatedMinutes) || estimatedMinutes < 1) {
+      setError("Enter a valid estimated time.");
+      return;
+    }
+    const previousTask = task;
+    const optimisticTask = {
+      ...task,
+      title,
+      category: form.category,
+      topic: form.topic?.trim() || "",
+      estimatedMinutes,
+    };
+    onSaved(optimisticTask);
+
+    mutationQueue.enqueue({
+      userId: mutationQueue.currentUserId,
+      resourceKey: `task:${task._id}`,
+      optimisticData: optimisticTask,
+      execute: async () => {
+        return await api(`/tasks/${task._id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            title,
+            category: form.category,
+            topic: form.topic?.trim() || "",
+            estimatedMinutes,
+          }),
+        });
+      },
+      onSuccess: async (updated) => {
+        onSaved(updated);
+      },
+      onRollback: (err) => {
+        onSaved(previousTask);
+        setError(err.message || "Failed to update task.");
+      },
+    });
   };
   return (
     <form className="task-edit-form" onSubmit={submit}>
@@ -734,32 +766,127 @@ function HabitSummary({ habit }) {
 }
 
 function HabitEntryRow({ habit, onRecord }) {
+  const debounceDelay = 500;
   const [input, setInput] = useState(
     habit.type === "time" && habit.value !== undefined
       ? toTimeInput(habit.value)
       : (habit.value ?? ""),
   );
+  const [durationUnit, setDurationUnit] = useState(
+    habit.unit === "minutes" && habit.value !== undefined && habit.value !== ""
+      ? "min"
+      : "hrs",
+  );
   const [error, setError] = useState("");
+  const [syncStatus, setSyncStatus] = useState("");
+  const isSubmittingRef = useRef(false);
+  const saveTimerRef = useRef(null);
+
+  useEffect(
+    () => () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    },
+    [],
+  );
+
   useEffect(() => {
+    if (isSubmittingRef.current) {
+      isSubmittingRef.current = false;
+      return;
+    }
     setInput(
       habit.type === "time" && habit.value !== undefined
         ? toTimeInput(habit.value)
         : (habit.value ?? ""),
     );
-  }, [habit.value, habit.type]);
-  const submit = async (event) => {
-    event.preventDefault();
-    if (habit.type !== "boolean" && input === "") {
-      setError("Enter a value");
+    if (habit.unit === "minutes") {
+      setDurationUnit(
+        habit.value !== undefined && habit.value !== "" ? "min" : "hrs",
+      );
+    }
+  }, [habit.value, habit.type, habit.unit]);
+
+  const getFinalValue = (nextInput, nextDurationUnit = durationUnit) => {
+    if (habit.type === "boolean") return Boolean(nextInput);
+    if (habit.unit === "minutes") {
+      const numericValue = Number(nextInput);
+      if (!Number.isFinite(numericValue) || numericValue < 0) return null;
+      return nextDurationUnit === "hrs"
+        ? Math.round(numericValue * 60)
+        : numericValue;
+    }
+    return nextInput;
+  };
+
+  const isValidInput = (nextInput) => {
+    if (habit.type === "boolean") return true;
+    if (nextInput === "") return false;
+    if (habit.type === "time") return /^\d{2}:\d{2}$/.test(nextInput);
+    if (habit.unit === "minutes") return getFinalValue(nextInput) !== null;
+    return Number.isFinite(Number(nextInput));
+  };
+
+  const commit = (nextInput, nextDurationUnit = durationUnit) => {
+    if (!isValidInput(nextInput)) return;
+    const finalValue = getFinalValue(nextInput, nextDurationUnit);
+    if (finalValue === null) return;
+    isSubmittingRef.current = true;
+    setError("");
+    onRecord(habit, finalValue, {
+      onSuccess: () => setSyncStatus("saved"),
+      onError: () => {
+        isSubmittingRef.current = false;
+        setSyncStatus("");
+      },
+    });
+  };
+
+  const scheduleSave = (
+    nextInput,
+    nextDurationUnit = durationUnit,
+    immediate = false,
+  ) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    if (!isValidInput(nextInput)) {
+      setSyncStatus("");
       return;
     }
-    if (habit.type === "time") setInput(toTimeInput(input));
-    setError("");
-    await onRecord(habit, habit.type === "boolean" ? Boolean(input) : input);
+    setSyncStatus("saving");
+    if (immediate) {
+      commit(nextInput, nextDurationUnit);
+      return;
+    }
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      commit(nextInput, nextDurationUnit);
+    }, debounceDelay);
   };
-  const hasValue = habit.display !== "No data recorded";
+
+  const handleInputChange = (nextInput) => {
+    setInput(nextInput);
+    scheduleSave(nextInput);
+  };
+
+  const handleUnitChange = (nextUnit) => {
+    setDurationUnit(nextUnit);
+    scheduleSave(input, nextUnit, true);
+  };
+
+  const previewValue = isValidInput(input) ? getFinalValue(input) : habit.value;
+  const previewHabit =
+    previewValue === habit.value
+      ? habit
+      : {
+          ...habit,
+          value: previewValue,
+          display: formatHabitValue(habit, previewValue),
+        };
+  const hasValue = previewHabit.display !== "No data recorded";
   return (
-    <form className="habit-entry-row" onSubmit={submit}>
+    <form
+      className="habit-entry-row"
+      onSubmit={(event) => event.preventDefault()}
+    >
       <span className="habit-icon" style={{ color: habit.color }}>
         <Icon name={habit.key} />
       </span>
@@ -772,16 +899,19 @@ function HabitEntryRow({ habit, onRecord }) {
           <input
             type="checkbox"
             checked={Boolean(input)}
-            onChange={(event) => setInput(event.target.checked)}
-          />{" "}
-          Mark as completed
+            onChange={(event) => {
+              const nextInput = event.target.checked;
+              setInput(nextInput);
+              scheduleSave(nextInput, durationUnit, true);
+            }}
+          />
         </label>
       ) : (
         <div className="habit-input-wrap">
           {habit.type === "time" ? (
             <TimeSelector
               value={input}
-              onChange={setInput}
+              onChange={handleInputChange}
               label={`${habit.name} actual value`}
               habitKey={habit.key}
             />
@@ -790,45 +920,64 @@ function HabitEntryRow({ habit, onRecord }) {
               aria-label={`${habit.name} actual value`}
               type="number"
               min="0"
-              step={habit.unit === "liters" ? "0.1" : "1"}
+              step={
+                habit.unit === "liters"
+                  ? "0.1"
+                  : habit.unit === "minutes" && durationUnit === "hrs"
+                    ? "any"
+                    : "1"
+              }
               value={input}
-              onChange={(event) => setInput(event.target.value)}
+              onChange={(event) => handleInputChange(event.target.value)}
+              className={habit.unit === "minutes" ? "habit-duration-input" : ""}
             />
           )}
-          <span>
-            {habit.type === "time"
-              ? ""
-              : habit.unit === "minutes"
-                ? "min"
-                : habit.unit}
-          </span>
+          {habit.type === "time" ? null : habit.unit === "minutes" ? (
+            <select
+              className="habit-unit-select"
+              aria-label={`${habit.name} unit`}
+              value={durationUnit}
+              onChange={(event) => handleUnitChange(event.target.value)}
+            >
+              <option value="hrs">hrs</option>
+              <option value="min">min</option>
+            </select>
+          ) : (
+            <span>{habit.unit}</span>
+          )}
         </div>
       )}
       <div className="habit-entry-result">
-        <strong>{habit.display}</strong>
-        {hasValue && habitStatus(habit, habit.value) && (
+        <strong>{previewHabit.display}</strong>
+        {hasValue && habitStatus(previewHabit, previewHabit.value) && (
           <small
             className={
-              habitStatus(habit, habit.value).includes("late")
+              habitStatus(previewHabit, previewHabit.value).includes("late")
                 ? "status-negative"
                 : "status-positive"
             }
           >
-            {habitStatus(habit, habit.value)}
+            {habitStatus(previewHabit, previewHabit.value)}
           </small>
         )}
         <div className="progress">
           <i
             style={{
-              width: `${habit.type === "range" || habit.type === "time" ? 0 : Math.min((habit.value || 0) / (habit.target || 1), 1) * 100}%`,
+              width: `${previewHabit.type === "range" || previewHabit.type === "time" ? 0 : Math.min((previewHabit.value || 0) / (previewHabit.target || 1), 1) * 100}%`,
               background: habit.color,
             }}
           />
         </div>
       </div>
-      <button className="primary-button habit-save" type="submit">
-        Save
-      </button>
+      <div className={`habit-sync-status ${syncStatus}`} aria-live="polite">
+        {syncStatus === "saving" ? (
+          "Saving..."
+        ) : syncStatus === "saved" ? (
+          <>
+            <Check size={13} strokeWidth={3} /> Saved
+          </>
+        ) : null}
+      </div>
       {error && (
         <small className="error-message habit-input-error">{error}</small>
       )}
@@ -885,6 +1034,10 @@ function App() {
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
+  }, [user]);
+  useEffect(() => {
+    const userId = user?.id || user?._id;
+    mutationQueue.setUserId(userId);
   }, [user]);
   useEffect(() => {
     const authRequestId = ++authRequestRef.current;
@@ -992,6 +1145,16 @@ function App() {
         api(`/meals?date=${today}`).catch(() => []),
       ]);
       const formattedHabits = sortHabits(habitDefinitions).map((habit) => {
+        const pendingHabit = mutationQueue.getPending(
+          `habit:${habit._id}:${today}`,
+        );
+        if (pendingHabit) {
+          return {
+            ...habit,
+            value: pendingHabit.value,
+            display: formatHabitValue(habit, pendingHabit.value),
+          };
+        }
         const record = records.find(
           (item) => String(item.habitId) === String(habit._id),
         );
@@ -1007,23 +1170,59 @@ function App() {
       });
       const formattedAnalytics = sortAnalyticsHabits(analyticsData);
 
-      setTasks(todayTasks);
-      setTomorrowTasks(nextTasks);
+      const reconciledTodayTasks = todayTasks.map((t) => {
+        const pending = mutationQueue.getPending(`task:${t._id}`);
+        return pending ? { ...t, ...pending } : t;
+      });
+      setTasks((current) => {
+        const optimisticCreated = current.filter((t) => t.isOptimistic);
+        const merged =
+          optimisticCreated.length > 0
+            ? [...reconciledTodayTasks, ...optimisticCreated]
+            : reconciledTodayTasks;
+        if (userId) {
+          setCache(`focusday_cache_${userId}_tasks_${today}`, merged);
+        }
+        return merged;
+      });
+
+      const reconciledTomorrowTasks = nextTasks.map((t) => {
+        const pending = mutationQueue.getPending(`task:${t._id}`);
+        return pending ? { ...t, ...pending } : t;
+      });
+      setTomorrowTasks((current) => {
+        const optimisticCreated = current.filter((t) => t.isOptimistic);
+        const merged =
+          optimisticCreated.length > 0
+            ? [...reconciledTomorrowTasks, ...optimisticCreated]
+            : reconciledTomorrowTasks;
+        if (userId) {
+          setCache(`focusday_cache_${userId}_tasks_${tomorrow}`, merged);
+        }
+        return merged;
+      });
+
       setHabits(formattedHabits);
       setAnalytics(formattedAnalytics);
-      if (Array.isArray(mealsData)) setTodayMeals(mealsData);
+
+      let reconciledMeals = mealsData;
+      if (Array.isArray(mealsData)) {
+        reconciledMeals = mealsData.map((m) => {
+          const pending = mutationQueue.getPending(`meal:${m.key}:${today}`);
+          return pending ? { ...m, ...pending } : m;
+        });
+        setTodayMeals(reconciledMeals);
+      }
       setError("");
 
       if (userId) {
-        setCache(`focusday_cache_${userId}_tasks_${today}`, todayTasks);
-        setCache(`focusday_cache_${userId}_tasks_${tomorrow}`, nextTasks);
         setCache(`focusday_cache_${userId}_habits_${today}`, formattedHabits);
         setCache(
           `focusday_cache_${userId}_analytics_${today}`,
           formattedAnalytics,
         );
-        if (Array.isArray(mealsData)) {
-          setCache(`focusday_cache_${userId}_meals_${today}`, mealsData);
+        if (Array.isArray(reconciledMeals)) {
+          setCache(`focusday_cache_${userId}_meals_${today}`, reconciledMeals);
         }
       }
     } catch (err) {
@@ -1038,110 +1237,270 @@ function App() {
     if (user) loadData();
   }, [user]);
 
-  useEffect(() => {
-    if (!user) return;
-    const userId = user.id || user._id;
-    const handleStorage = (e) => {
-      if (e.key && e.key.startsWith(`focusday_cache_${userId}_`)) {
-        loadData({ showLoader: false });
-      }
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, [user]);
-
-  const addTodayTask = (task) => {
+  const addTodayTask = (taskData) => {
     const userId = user?.id || user?._id;
+    const today = localDate();
+
+    if (tasks.length >= 3) {
+      setError("You can have a maximum of 3 tasks per day.");
+      return;
+    }
+
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const optimisticTask = {
+      _id: tempId,
+      date: today,
+      title: taskData.title,
+      category: taskData.category,
+      topic: taskData.topic || "",
+      estimatedMinutes: taskData.estimatedMinutes,
+      status: "pending",
+      carriedOver: false,
+      isOptimistic: true,
+      createdAt: new Date().toISOString(),
+    };
+
     setTasks((current) => {
-      const next = [...current, task];
-      if (userId)
-        setCache(`focusday_cache_${userId}_tasks_${localDate()}`, next);
+      const next = [...current, optimisticTask];
+      if (userId) setCache(`focusday_cache_${userId}_tasks_${today}`, next);
       return next;
     });
-    if (userId)
-      removeCache(`focusday_cache_${userId}_analytics_${localDate()}`);
+    if (userId) removeCache(`focusday_cache_${userId}_analytics_${today}`);
     setShowForm(false);
     setError("");
+
+    mutationQueue.enqueue({
+      userId,
+      resourceKey: `task-create:${tempId}`,
+      optimisticData: optimisticTask,
+      execute: async () => {
+        return await api("/tasks", {
+          method: "POST",
+          body: JSON.stringify({
+            date: today,
+            title: taskData.title,
+            category: taskData.category,
+            topic: taskData.topic || "",
+            estimatedMinutes: taskData.estimatedMinutes,
+          }),
+        });
+      },
+      onSuccess: async (realTask) => {
+        setTasks((current) => {
+          const next = current.map((item) =>
+            item._id === tempId ? realTask : item,
+          );
+          if (userId) setCache(`focusday_cache_${userId}_tasks_${today}`, next);
+          return next;
+        });
+      },
+      onRollback: (err) => {
+        setTasks((current) => {
+          const next = current.filter((item) => item._id !== tempId);
+          if (userId) setCache(`focusday_cache_${userId}_tasks_${today}`, next);
+          return next;
+        });
+        setError(err.message || "Failed to save task.");
+      },
+    });
   };
 
-  const addTomorrowTask = (task) => {
+  const addTomorrowTask = (taskData) => {
     const userId = user?.id || user?._id;
+    const tomorrow = localDate(1);
+
+    const completedCount = tasks.filter((t) => t.status === "completed").length;
+    const unfinishedCount = tasks.filter((t) => t.status === "pending").length;
+    if (completedCount === 0) {
+      setError("Complete today's tasks to unlock tomorrow's planning.");
+      return;
+    }
+    const maxAllowedNewTomorrow = Math.min(completedCount, 3 - unfinishedCount);
+    if (tomorrowTasks.length >= maxAllowedNewTomorrow) {
+      if (tomorrowTasks.length + unfinishedCount >= 3) {
+        setError(
+          "Tomorrow's capacity (including carried-over tasks) cannot exceed 3 tasks.",
+        );
+      } else {
+        setError(
+          "Complete more of today's tasks to unlock more tomorrow slots.",
+        );
+      }
+      return;
+    }
+    if (tomorrowTasks.length >= 3) {
+      setError("You can have a maximum of 3 tasks per day.");
+      return;
+    }
+
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const optimisticTask = {
+      _id: tempId,
+      date: tomorrow,
+      title: taskData.title,
+      category: taskData.category,
+      topic: taskData.topic || "",
+      estimatedMinutes: taskData.estimatedMinutes,
+      status: "pending",
+      carriedOver: false,
+      isOptimistic: true,
+      createdAt: new Date().toISOString(),
+    };
+
     setTomorrowTasks((current) => {
-      const next = [...current, task];
-      if (userId)
-        setCache(`focusday_cache_${userId}_tasks_${localDate(1)}`, next);
+      const next = [...current, optimisticTask];
+      if (userId) setCache(`focusday_cache_${userId}_tasks_${tomorrow}`, next);
       return next;
     });
     setError("");
+
+    mutationQueue.enqueue({
+      userId,
+      resourceKey: `task-create:${tempId}`,
+      optimisticData: optimisticTask,
+      execute: async () => {
+        return await api("/tasks", {
+          method: "POST",
+          body: JSON.stringify({
+            date: tomorrow,
+            title: taskData.title,
+            category: taskData.category,
+            topic: taskData.topic || "",
+            estimatedMinutes: taskData.estimatedMinutes,
+          }),
+        });
+      },
+      onSuccess: async (realTask) => {
+        setTomorrowTasks((current) => {
+          const next = current.map((item) =>
+            item._id === tempId ? realTask : item,
+          );
+          if (userId)
+            setCache(`focusday_cache_${userId}_tasks_${tomorrow}`, next);
+          return next;
+        });
+      },
+      onRollback: (err) => {
+        setTomorrowTasks((current) => {
+          const next = current.filter((item) => item._id !== tempId);
+          if (userId)
+            setCache(`focusday_cache_${userId}_tasks_${tomorrow}`, next);
+          return next;
+        });
+        setError(err.message || "Failed to save tomorrow task.");
+      },
+    });
   };
 
-  const toggleTask = async (task) => {
-    try {
-      const updated = await api(`/tasks/${task._id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          status: task.status === "completed" ? "pending" : "completed",
-        }),
-      });
-      const userId = user?.id || user?._id;
-      setTasks((current) => {
-        const next = current.map((item) =>
-          item._id === updated._id ? updated : item,
-        );
-        if (userId)
-          setCache(`focusday_cache_${userId}_tasks_${localDate()}`, next);
-        return next;
-      });
-      setTomorrowTasks((current) => {
-        const next = current.map((item) =>
-          item._id === updated._id ? updated : item,
-        );
-        if (userId)
-          setCache(`focusday_cache_${userId}_tasks_${localDate(1)}`, next);
-        return next;
-      });
-      if (userId)
-        removeCache(`focusday_cache_${userId}_analytics_${localDate()}`);
-      api("/analytics")
-        .then((analyticsData) => {
-          const sorted = sortAnalyticsHabits(analyticsData);
-          setAnalytics(sorted);
+  const toggleTask = (task) => {
+    const userId = user?.id || user?._id;
+    const nextStatus = task.status === "completed" ? "pending" : "completed";
+    const previousTask = task;
+    const optimisticTask = { ...task, status: nextStatus };
+    const today = localDate();
+    const tomorrow = localDate(1);
+
+    // 1. UPDATE UI IMMEDIATELY
+    setTasks((current) => {
+      const next = current.map((item) =>
+        item._id === task._id ? optimisticTask : item,
+      );
+      if (userId) setCache(`focusday_cache_${userId}_tasks_${today}`, next);
+      return next;
+    });
+    setTomorrowTasks((current) => {
+      const next = current.map((item) =>
+        item._id === task._id ? optimisticTask : item,
+      );
+      if (userId) setCache(`focusday_cache_${userId}_tasks_${tomorrow}`, next);
+      return next;
+    });
+    setError("");
+
+    // 2. QUEUE BACKGROUND MUTATION
+    mutationQueue.enqueue({
+      userId,
+      resourceKey: `task:${task._id}`,
+      optimisticData: optimisticTask,
+      execute: async () => {
+        return await api(`/tasks/${task._id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: nextStatus }),
+        });
+      },
+      onSuccess: async (updated) => {
+        setTasks((current) => {
+          const next = current.map((item) =>
+            item._id === updated._id ? updated : item,
+          );
+          if (userId) setCache(`focusday_cache_${userId}_tasks_${today}`, next);
+          return next;
+        });
+        setTomorrowTasks((current) => {
+          const next = current.map((item) =>
+            item._id === updated._id ? updated : item,
+          );
           if (userId)
-            setCache(
-              `focusday_cache_${userId}_analytics_${localDate()}`,
-              sorted,
-            );
-        })
-        .catch(() => {});
-    } catch (err) {
-      setError(err.message);
-    }
+            setCache(`focusday_cache_${userId}_tasks_${tomorrow}`, next);
+          return next;
+        });
+
+        // Background analytics refresh
+        api("/analytics")
+          .then((analyticsData) => {
+            const sorted = sortAnalyticsHabits(analyticsData);
+            setAnalytics(sorted);
+            if (userId)
+              setCache(`focusday_cache_${userId}_analytics_${today}`, sorted);
+          })
+          .catch(() => {});
+      },
+      onRollback: (err) => {
+        setTasks((current) => {
+          const reverted = current.map((item) =>
+            item._id === task._id ? previousTask : item,
+          );
+          if (userId)
+            setCache(`focusday_cache_${userId}_tasks_${today}`, reverted);
+          return reverted;
+        });
+        setTomorrowTasks((current) => {
+          const reverted = current.map((item) =>
+            item._id === task._id ? previousTask : item,
+          );
+          if (userId)
+            setCache(`focusday_cache_${userId}_tasks_${tomorrow}`, reverted);
+          return reverted;
+        });
+        setError(err.message || "Failed to update task status.");
+      },
+    });
   };
 
   const updateTask = (updated) => {
     const userId = user?.id || user?._id;
+    const today = localDate();
+    const tomorrow = localDate(1);
     setTasks((current) => {
       const next = current.map((item) =>
         item._id === updated._id ? updated : item,
       );
-      if (userId)
-        setCache(`focusday_cache_${userId}_tasks_${localDate()}`, next);
+      if (userId) setCache(`focusday_cache_${userId}_tasks_${today}`, next);
       return next;
     });
     setTomorrowTasks((current) => {
       const next = current.map((item) =>
         item._id === updated._id ? updated : item,
       );
-      if (userId)
-        setCache(`focusday_cache_${userId}_tasks_${localDate(1)}`, next);
+      if (userId) setCache(`focusday_cache_${userId}_tasks_${tomorrow}`, next);
       return next;
     });
-    if (userId)
-      removeCache(`focusday_cache_${userId}_analytics_${localDate()}`);
+    if (userId) removeCache(`focusday_cache_${userId}_analytics_${today}`);
     setError("");
   };
 
-  const recordHabit = async (habit, input) => {
+  const recordHabit = (habit, input, syncCallbacks = {}) => {
+    const { onSuccess, onError } = syncCallbacks;
     const actualValue =
       habit.type === "boolean"
         ? Boolean(input)
@@ -1154,51 +1513,110 @@ function App() {
         (typeof actualValue === "number" && !Number.isFinite(actualValue)))
     ) {
       setError("Enter a valid habit value.");
+      onError?.();
       return;
     }
     if (habit.type === "time" && !/^\d{2}:\d{2}$/.test(input)) {
       setError("Enter a valid time in HH:MM format.");
+      onError?.();
       return;
     }
-    try {
-      const record = await api("/habits/records", {
-        method: "POST",
-        body: JSON.stringify({
-          habitId: habit._id,
-          date: localDate(),
-          actualValue,
-        }),
-      });
-      const rawSavedValue = record.actualValue ?? record.value;
-      const savedValue =
-        habit.type === "time"
-          ? normalizeTimeValue(rawSavedValue)
-          : rawSavedValue;
-      const userId = user?.id || user?._id;
-      setHabits((current) => {
-        const next = current.map((item) =>
-          item._id === habit._id
-            ? {
-                ...item,
-                value: savedValue,
-                display: formatHabitValue(item, savedValue),
-              }
-            : item,
-        );
-        if (userId)
-          setCache(`focusday_cache_${userId}_habits_${localDate()}`, next);
-        return next;
-      });
-      const freshAnalytics = sortAnalyticsHabits(await api("/analytics"));
-      setAnalytics(freshAnalytics);
-      if (userId)
-        setCache(
-          `focusday_cache_${userId}_analytics_${localDate()}`,
-          freshAnalytics,
-        );
-    } catch (err) {
-      setError(err.message);
+
+    const userId = user?.id || user?._id;
+    const today = localDate();
+    const normalizedActual =
+      habit.type === "time" ? normalizeTimeValue(actualValue) : actualValue;
+
+    const previousHabit = habits.find((h) => h._id === habit._id);
+    const previousValue = previousHabit ? previousHabit.value : undefined;
+    const previousDisplay = previousHabit
+      ? previousHabit.display
+      : "No data recorded";
+
+    // 1. UPDATE UI IMMEDIATELY
+    const optimisticHabits = habits.map((item) =>
+      item._id === habit._id
+        ? {
+            ...item,
+            value: normalizedActual,
+            display: formatHabitValue(item, normalizedActual),
+          }
+        : item,
+    );
+    setHabits(optimisticHabits);
+    setError("");
+
+    // 2. UPDATE LOCAL CACHE IMMEDIATELY
+    if (userId) {
+      setCache(`focusday_cache_${userId}_habits_${today}`, optimisticHabits);
     }
+
+    // 3. QUEUE BACKGROUND MUTATION
+    mutationQueue.enqueue({
+      userId,
+      resourceKey: `habit:${habit._id}:${today}`,
+      optimisticData: { value: normalizedActual },
+      execute: async () => {
+        return await api("/habits/records", {
+          method: "POST",
+          body: JSON.stringify({
+            habitId: habit._id,
+            date: today,
+            actualValue,
+          }),
+        });
+      },
+      onSuccess: async (record) => {
+        const rawSavedValue = record.actualValue ?? record.value;
+        const savedValue =
+          habit.type === "time"
+            ? normalizeTimeValue(rawSavedValue)
+            : rawSavedValue;
+        setHabits((current) => {
+          const next = current.map((item) =>
+            item._id === habit._id
+              ? {
+                  ...item,
+                  value: savedValue,
+                  display: formatHabitValue(item, savedValue),
+                }
+              : item,
+          );
+          if (userId)
+            setCache(`focusday_cache_${userId}_habits_${today}`, next);
+          return next;
+        });
+        onSuccess?.();
+
+        // Background analytics refresh
+        api("/analytics")
+          .then((freshAnalytics) => {
+            const sorted = sortAnalyticsHabits(freshAnalytics);
+            setAnalytics(sorted);
+            if (userId)
+              setCache(`focusday_cache_${userId}_analytics_${today}`, sorted);
+          })
+          .catch(() => {});
+      },
+      onRollback: (err) => {
+        setHabits((current) => {
+          const reverted = current.map((item) =>
+            item._id === habit._id
+              ? {
+                  ...item,
+                  value: previousValue,
+                  display: previousDisplay,
+                }
+              : item,
+          );
+          if (userId)
+            setCache(`focusday_cache_${userId}_habits_${today}`, reverted);
+          return reverted;
+        });
+        onError?.(err);
+        setError(err.message || "Failed to save habit.");
+      },
+    });
   };
 
   const logout = () => {
@@ -1206,8 +1624,12 @@ function App() {
     authRequestRef.current += 1;
     clearToken();
     try {
-      if (userId) clearUserCache(userId);
+      if (userId) {
+        mutationQueue.clearUser(userId);
+        clearUserCache(userId);
+      }
     } catch {}
+    mutationQueue.setUserId(null);
     removeCache("focusday_auth_user");
     setUser(null);
     setAuthLoading(false);
@@ -1232,9 +1654,6 @@ function App() {
     TaskRow,
     TaskForm,
     HabitSummary,
-    Comparison,
-    ThisWeekCard,
-    WeekComparisonCard,
     localDate,
     habitSatisfied,
     CalendarDays,
@@ -1269,7 +1688,6 @@ function App() {
                 tomorrowTasks={tomorrowTasks}
                 addTomorrowTask={addTomorrowTask}
                 habits={habits}
-                analytics={analytics}
                 meals={todayMeals}
                 user={user}
                 api={api}
@@ -1283,19 +1701,7 @@ function App() {
               />
             }
           />
-          <Route
-            path="/plan"
-            element={
-              <PlanPage
-                {...sharedPageProps}
-                todayTasks={tasks}
-                tasks={tomorrowTasks}
-                addTask={addTomorrowTask}
-                updateTask={updateTask}
-                toggleTask={toggleTask}
-              />
-            }
-          />
+          <Route path="/plan" element={<Navigate to="/today" replace />} />
           <Route
             path="/habits"
             element={
@@ -1318,6 +1724,7 @@ function App() {
                 setError={setError}
                 api={api}
                 localDate={localDate}
+                onMealsUpdated={setTodayMeals}
               />
             }
           />

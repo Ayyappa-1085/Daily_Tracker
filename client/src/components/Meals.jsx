@@ -7,6 +7,7 @@ import {
   Scale,
 } from "lucide-react";
 import { getCache, setCache } from "../utils/cache";
+import { mutationQueue } from "../utils/mutationQueue";
 import oatsImage from "../assets/meal-oats.svg";
 import tiffinImage from "../assets/meal-tiffin.svg";
 import lunchImage from "../assets/meal-lunch.svg";
@@ -41,7 +42,13 @@ const formatWeight = (value) =>
     ? "No data"
     : `${Number(value).toFixed(1)} kg`;
 
-export default function Meals({ user, setError, api, localDate }) {
+export default function Meals({
+  user,
+  setError,
+  api,
+  localDate,
+  onMealsUpdated,
+}) {
   const today = localDate();
   const userId = user?.id || user?._id;
   const [selectedDate, setSelectedDate] = useState(today);
@@ -51,7 +58,6 @@ export default function Meals({ user, setError, api, localDate }) {
   const [weightInput, setWeightInput] = useState("");
   const [weightPeriod, setWeightPeriod] = useState("28");
   const [loading, setLoading] = useState(true);
-  const [savingWeight, setSavingWeight] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,11 +70,17 @@ export default function Meals({ user, setError, api, localDate }) {
         if (cached) setMeals(cached);
         const freshMeals = await api(`/meals?date=${selectedDate}`);
         if (!cancelled) {
-          setMeals(freshMeals);
+          const reconciledMeals = freshMeals.map((m) => {
+            const pending = mutationQueue.getPending(
+              `meal:${m.key}:${selectedDate}`,
+            );
+            return pending ? { ...m, ...pending } : m;
+          });
+          setMeals(reconciledMeals);
           if (userId)
             setCache(
               `focusday_cache_${userId}_meals_${selectedDate}`,
-              freshMeals,
+              reconciledMeals,
             );
         }
       } catch (err) {
@@ -86,8 +98,16 @@ export default function Meals({ user, setError, api, localDate }) {
         ]);
         if (!cancelled) {
           setMealAnalytics(analyticsData);
-          setWeights(weightData);
-          const currentWeight = weightData.find(
+          const pendingWeight = mutationQueue.getPending(`weight:${today}`);
+          let reconciledWeights = weightData;
+          if (pendingWeight) {
+            reconciledWeights = [
+              ...weightData.filter((r) => r.date !== today),
+              pendingWeight,
+            ].sort((a, b) => a.date.localeCompare(b.date));
+          }
+          setWeights(reconciledWeights);
+          const currentWeight = reconciledWeights.find(
             (record) => record.date === today,
           );
           setWeightInput(currentWeight ? String(currentWeight.weight) : "");
@@ -107,7 +127,7 @@ export default function Meals({ user, setError, api, localDate }) {
   const isToday = selectedDate === today;
   const isFutureDate = selectedDate > today;
 
-  const toggleMeal = async (meal) => {
+  const toggleMeal = (meal) => {
     if (!isToday) {
       if (isPastDate) {
         setError("Historical meals cannot be modified.");
@@ -116,29 +136,81 @@ export default function Meals({ user, setError, api, localDate }) {
       }
       return;
     }
-    try {
-      const updated = await api(`/meals/${meal.key}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          date: selectedDate,
-          completed: !meal.completed,
-        }),
-      });
-      setMeals((current) => {
-        const next = current.map((item) =>
-          item.key === updated.key ? updated : item,
-        );
-        if (userId)
-          setCache(`focusday_cache_${userId}_meals_${selectedDate}`, next);
-        return next;
-      });
-      setMealAnalytics(await api("/meals/analytics/summary"));
-    } catch (err) {
-      setError(err.message);
+
+    const nextCompleted = !meal.completed;
+    const previousMeals = meals;
+    const optimisticMeals = meals.map((item) =>
+      item.key === meal.key
+        ? {
+            ...item,
+            completed: nextCompleted,
+            completedAt: nextCompleted ? new Date().toISOString() : null,
+          }
+        : item,
+    );
+
+    // 1. UPDATE UI IMMEDIATELY
+    setMeals(optimisticMeals);
+    if (isToday && onMealsUpdated) {
+      onMealsUpdated(optimisticMeals);
     }
+    setError("");
+
+    // 2. UPDATE CACHE IMMEDIATELY
+    if (userId) {
+      setCache(
+        `focusday_cache_${userId}_meals_${selectedDate}`,
+        optimisticMeals,
+      );
+    }
+
+    // 3. QUEUE BACKGROUND MUTATION
+    mutationQueue.enqueue({
+      userId,
+      resourceKey: `meal:${meal.key}:${selectedDate}`,
+      optimisticData: { completed: nextCompleted },
+      execute: async () => {
+        return await api(`/meals/${meal.key}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            date: selectedDate,
+            completed: nextCompleted,
+          }),
+        });
+      },
+      onSuccess: async (updated) => {
+        setMeals((current) => {
+          const next = current.map((item) =>
+            item.key === updated.key ? updated : item,
+          );
+          if (userId)
+            setCache(`focusday_cache_${userId}_meals_${selectedDate}`, next);
+          if (isToday && onMealsUpdated) {
+            onMealsUpdated(next);
+          }
+          return next;
+        });
+        api("/meals/analytics/summary")
+          .then((fresh) => setMealAnalytics(fresh))
+          .catch(() => {});
+      },
+      onRollback: (err) => {
+        setMeals(previousMeals);
+        if (userId) {
+          setCache(
+            `focusday_cache_${userId}_meals_${selectedDate}`,
+            previousMeals,
+          );
+        }
+        if (isToday && onMealsUpdated) {
+          onMealsUpdated(previousMeals);
+        }
+        setError(err.message || "Failed to update meal.");
+      },
+    });
   };
 
-  const saveWeight = async (event) => {
+  const saveWeight = (event) => {
     event.preventDefault();
     if (!isToday) {
       if (isPastDate) {
@@ -148,26 +220,58 @@ export default function Meals({ user, setError, api, localDate }) {
       }
       return;
     }
-    setSavingWeight(true);
-    try {
-      const saved = await api("/weight", {
-        method: "POST",
-        body: JSON.stringify({
-          date: selectedDate,
-          weight: Number(weightInput),
-        }),
-      });
-      setWeights((current) =>
-        [...current.filter((record) => record.date !== saved.date), saved].sort(
-          (left, right) => left.date.localeCompare(right.date),
-        ),
-      );
-      setError("");
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSavingWeight(false);
+    const numericWeight = Number(weightInput);
+    if (
+      !Number.isFinite(numericWeight) ||
+      numericWeight <= 0 ||
+      numericWeight > 500
+    ) {
+      setError("Enter a valid weight.");
+      return;
     }
+
+    const previousWeights = weights;
+    const optimisticRecord = {
+      date: selectedDate,
+      weight: numericWeight,
+      userId,
+    };
+    const optimisticWeights = [
+      ...weights.filter((record) => record.date !== selectedDate),
+      optimisticRecord,
+    ].sort((left, right) => left.date.localeCompare(right.date));
+
+    // 1. UPDATE UI IMMEDIATELY
+    setWeights(optimisticWeights);
+    setError("");
+
+    // 2. QUEUE BACKGROUND MUTATION
+    mutationQueue.enqueue({
+      userId,
+      resourceKey: `weight:${selectedDate}`,
+      optimisticData: optimisticRecord,
+      execute: async () => {
+        return await api("/weight", {
+          method: "POST",
+          body: JSON.stringify({
+            date: selectedDate,
+            weight: numericWeight,
+          }),
+        });
+      },
+      onSuccess: async (saved) => {
+        setWeights((current) =>
+          [
+            ...current.filter((record) => record.date !== saved.date),
+            saved,
+          ].sort((left, right) => left.date.localeCompare(right.date)),
+        );
+      },
+      onRollback: (err) => {
+        setWeights(previousWeights);
+        setError(err.message || "Failed to save weight.");
+      },
+    });
   };
 
   const completedMeals = meals.filter((meal) => meal.completed).length;
@@ -458,7 +562,7 @@ export default function Meals({ user, setError, api, localDate }) {
             </label>
             <button
               className="primary-button"
-              disabled={!isToday || savingWeight}
+              disabled={!isToday}
               title={
                 isPastDate
                   ? "Historical weight records cannot be modified"
@@ -471,13 +575,11 @@ export default function Meals({ user, setError, api, localDate }) {
               }
               type="submit"
             >
-              {savingWeight
-                ? "Saving..."
-                : isPastDate
-                  ? "Historical"
-                  : isFutureDate
-                    ? "Future date"
-                    : "Save"}
+              {isPastDate
+                ? "Historical"
+                : isFutureDate
+                  ? "Future date"
+                  : "Save"}
             </button>
           </form>
         </article>

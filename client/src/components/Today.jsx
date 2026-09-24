@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getCache, setCache } from "../utils/cache";
+import { dailyQuotes } from "../quotes";
 
 export default function Today({
   tasks,
@@ -9,7 +10,6 @@ export default function Today({
   meals = [],
   user,
   api,
-  analytics,
   loading,
   showForm,
   setShowForm,
@@ -19,9 +19,6 @@ export default function Today({
   TaskRow,
   TaskForm,
   HabitSummary,
-  Comparison,
-  ThisWeekCard,
-  WeekComparisonCard,
   localDate,
   habitSatisfied,
   CalendarDays,
@@ -38,6 +35,11 @@ export default function Today({
   const [showTomorrowForm, setShowTomorrowForm] = useState(false);
 
   const today = localDate ? localDate() : new Date().toISOString().slice(0, 10);
+  const quoteDate = new Date(`${today}T12:00:00`);
+  const yearStart = new Date(quoteDate.getFullYear(), 0, 1);
+  const dayOfYear =
+    Math.floor((quoteDate - yearStart) / (24 * 60 * 60 * 1000)) + 1;
+  const dailyQuote = dailyQuotes[(dayOfYear - 1) % dailyQuotes.length];
   const userId = user?.id || user?._id;
   const cachedMeals = userId
     ? getCache(`focusday_cache_${userId}_meals_${today}`)
@@ -99,7 +101,7 @@ export default function Today({
           <h1>Good morning!</h1>
           <p>Stay consistent. Small steps make a big difference.</p>
         </div>
-        <div className="quote">“Discipline today, a better tomorrow.”</div>
+        <div className="quote">“{dailyQuote}”</div>
       </div>
       <div className="dashboard-grid">
         <section className="panel ref-card tasks-panel">
@@ -301,14 +303,6 @@ export default function Today({
             <p className="empty-state">No habits available.</p>
           )}
         </section>
-      </div>
-      <div className="dashboard-analytics-grid">
-        <Comparison data={analytics} />
-        <ThisWeekCard summary={analytics?.currentWeek} />
-        <WeekComparisonCard
-          current={analytics?.currentWeek}
-          previous={analytics?.previousWeek}
-        />
       </div>
     </div>
   );
