@@ -33,6 +33,7 @@ import TodayPage from "./components/Today";
 import HabitsPage from "./components/Habits";
 import AnalyticsPage from "./components/Analytics";
 import Meals from "./components/Meals";
+import Coach from "./components/Coach";
 
 const rawApiUrl = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
@@ -201,7 +202,7 @@ const habitSatisfied = (habit) => {
   return habit.value >= habit.target;
 };
 const TOKEN_KEY = "focusday-token";
-const DASHBOARD_PATHS = ["/today", "/habits", "/analytics", "/meals"];
+const DASHBOARD_PATHS = ["/today", "/habits", "/analytics", "/meals", "/coach"];
 const getToken = () => {
   try {
     return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
@@ -1740,6 +1741,7 @@ function App() {
               />
             }
           />
+          <Route path="/coach" element={<Coach user={user} api={api} localDate={localDate} />} />
           <Route path="*" element={<Navigate to="/today" replace />} />
         </Routes>
       </main>

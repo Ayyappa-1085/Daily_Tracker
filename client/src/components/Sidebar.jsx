@@ -1,10 +1,11 @@
-import { BarChart3, Home, Target, Utensils } from "lucide-react";
+import { BarChart3, Home, MessageSquare, Target, Utensils } from "lucide-react";
 
 const navItems = [
   { label: "Today", path: "/today", icon: Home },
   { label: "Habits", path: "/habits", icon: Target },
   { label: "Meals", path: "/meals", icon: Utensils },
   { label: "Analytics", path: "/analytics", icon: BarChart3 },
+  { label: "Coach", path: "/coach", icon: MessageSquare },
 ];
 
 export default function Sidebar({ pathname, navigate, onNavigate }) {

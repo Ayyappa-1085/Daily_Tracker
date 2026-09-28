@@ -21,10 +21,19 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    const user = await User.findOne({ email: req.body.email?.toLowerCase() });
-    if (!user || !(await bcrypt.compare(req.body.password || '', user.passwordHash))) return res.status(401).json({ message: 'Invalid email or password.' });
+    const user = await User.findOne({ email: req.body.email?.toLowerCase() }).select('+password');
+    if (!user) return res.status(401).json({ message: 'Invalid email or password.' });
+    const passwordHash = user.passwordHash || user.password;
+    if (typeof passwordHash !== 'string' || !passwordHash) {
+      console.error('Login failed: user record has no password hash.', { userId: user._id.toString() });
+      return res.status(500).json({ message: 'Unable to sign in.' });
+    }
+    if (!(await bcrypt.compare(req.body.password || '', passwordHash))) return res.status(401).json({ message: 'Invalid email or password.' });
     res.json({ token: tokenFor(user), user: { id: user._id, name: user.name, email: user.email } });
-  } catch { res.status(500).json({ message: 'Unable to sign in.' }); }
+  } catch (error) {
+    console.error('Login failed:', { name: error.name, code: error.code, message: error.message });
+    res.status(500).json({ message: 'Unable to sign in.' });
+  }
 });
 
 router.get('/me', auth, (req, res) => res.json({ user: { id: req.user._id, name: req.user.name, email: req.user.email } }));
