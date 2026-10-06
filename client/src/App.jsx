@@ -541,7 +541,7 @@ function TaskEditor({ task, onSaved, onCancel }) {
         });
       },
       onSuccess: async (updated) => {
-        onSaved(updated);
+        onSaved(updated, true);
       },
       onRollback: (err) => {
         onSaved(previousTask);
@@ -611,8 +611,8 @@ function TaskRow({ task, onToggle, onSaved, isTomorrow = false }) {
       <div className="ref-task-row ref-task-row-editing">
         <TaskEditor
           task={task}
-          onSaved={(updated) => {
-            onSaved(updated);
+          onSaved={(updated, persisted) => {
+            onSaved(updated, persisted);
             setEditing(false);
           }}
           onCancel={() => setEditing(false)}
@@ -1446,15 +1446,7 @@ function App() {
           return next;
         });
 
-        // Background analytics refresh
-        api("/analytics")
-          .then((analyticsData) => {
-            const sorted = sortAnalyticsHabits(analyticsData);
-            setAnalytics(sorted);
-            if (userId)
-              setCache(`focusday_cache_${userId}_analytics_${today}`, sorted);
-          })
-          .catch(() => {});
+        await loadData({ showLoader: false });
       },
       onRollback: (err) => {
         setTasks((current) => {
@@ -1478,7 +1470,7 @@ function App() {
     });
   };
 
-  const updateTask = (updated) => {
+  const updateTask = (updated, persisted = false) => {
     const userId = user?.id || user?._id;
     const today = localDate();
     const tomorrow = localDate(1);
@@ -1498,6 +1490,7 @@ function App() {
     });
     if (userId) removeCache(`focusday_cache_${userId}_analytics_${today}`);
     setError("");
+    if (persisted) loadData({ showLoader: false });
   };
 
   const recordHabit = (habit, input, syncCallbacks = {}) => {
@@ -1741,7 +1734,10 @@ function App() {
               />
             }
           />
-          <Route path="/coach" element={<Coach user={user} api={api} localDate={localDate} />} />
+          <Route
+            path="/coach"
+            element={<Coach user={user} api={api} localDate={localDate} />}
+          />
           <Route path="*" element={<Navigate to="/today" replace />} />
         </Routes>
       </main>

@@ -2,8 +2,10 @@ const router = require('express').Router();
 const mongoose = require('mongoose');
 const Task = require('../models/Task');
 const auth = require('../middleware/auth');
+const { syncTaskHabitRecords } = require('../utils/taskHabits');
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+const taskCategories = ['DSA', 'Study', 'Project', 'Personal', 'Other'];
 const localDate = (offset = 0) => {
   const date = new Date();
   date.setHours(12, 0, 0, 0);
@@ -32,6 +34,7 @@ router.post('/', async (req, res) => {
   try {
     const { date, title, category, topic, estimatedMinutes, carriedOver } = req.body;
     if (!datePattern.test(date) || !title || !Number.isInteger(estimatedMinutes) || estimatedMinutes < 1) return res.status(400).json({ message: 'Enter a valid date, title, and time.' });
+    if (category !== undefined && !taskCategories.includes(category)) return res.status(400).json({ message: 'Invalid task category.' });
     const localToday = localDate();
     const tomorrow = localDate(1);
     if (date < localToday) return res.status(400).json({ message: 'Tasks must use today or a future date.' });
@@ -62,7 +65,9 @@ router.post('/', async (req, res) => {
 
     const count = await Task.countDocuments({ userId: req.user._id, date });
     if (count >= 3) return res.status(409).json({ message: 'You can have a maximum of 3 tasks per day.' });
-    res.status(201).json(await Task.create({ userId: req.user._id, date, title, category, topic, estimatedMinutes, carriedOver: Boolean(carriedOver) }));
+    const task = await Task.create({ userId: req.user._id, date, title, category, topic, estimatedMinutes, carriedOver: Boolean(carriedOver) });
+    await syncTaskHabitRecords(req.user._id, [date]);
+    res.status(201).json(task);
   } catch (error) { console.error('Create task failed:', error); res.status(500).json({ message: 'Unable to save task.' }); }
 });
 
@@ -77,7 +82,7 @@ router.patch('/:id', async (req, res) => {
   if ('title' in req.body && (typeof title !== 'string' || !title.trim() || title.length > 120)) {
     return res.status(400).json({ message: 'Invalid task title.' });
   }
-  if ('category' in req.body && !['DSA', 'Study', 'Project', 'Personal', 'Other'].includes(category)) {
+  if ('category' in req.body && !taskCategories.includes(category)) {
     return res.status(400).json({ message: 'Invalid task category.' });
   }
   if ('topic' in req.body && (typeof topic !== 'string' || topic.length > 80)) {
@@ -96,6 +101,7 @@ router.patch('/:id', async (req, res) => {
   try {
     const task = await Task.findOneAndUpdate({ _id: req.params.id, userId: req.user._id }, { $set: updates }, { returnDocument: 'after', runValidators: true });
     if (!task) return res.status(404).json({ message: 'Task not found.' });
+    await syncTaskHabitRecords(req.user._id, [task.date]);
     res.json(task);
   } catch (error) { console.error('Update task failed:', error); res.status(500).json({ message: 'Unable to update task.' }); }
 });

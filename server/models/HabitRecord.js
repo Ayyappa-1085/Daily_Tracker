@@ -7,6 +7,8 @@ const recordSchema = new mongoose.Schema({
   actualValue: { type: mongoose.Schema.Types.Mixed },
   value: { type: Number, min: 0 },
   secondaryValue: { type: Number, min: 0 },
+  manualValue: { type: Number, min: 0 },
+  taskValue: { type: Number, min: 0 },
 }, { timestamps: true });
 
 recordSchema.index({ userId: 1, habitId: 1, date: 1 }, { unique: true });

@@ -119,9 +119,14 @@ export default function Coach({ user, api }) {
   const inputRef = useRef(null);
 
   const userName = user?.name || "Dude";
+  const hasConversation = messages.length > 0;
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const messagesArea = messagesEndRef.current?.parentElement;
+    messagesArea?.scrollTo({
+      top: messagesArea.scrollHeight,
+      behavior: "smooth",
+    });
   };
 
   useEffect(() => {
@@ -137,10 +142,7 @@ export default function Coach({ user, api }) {
     setError("");
     setInput("");
 
-    const newMessages = [
-      ...messages,
-      { role: "user", content: textToSend },
-    ];
+    const newMessages = [...messages, { role: "user", content: textToSend }];
     setMessages(newMessages);
     setLoading(true);
 
@@ -159,10 +161,14 @@ export default function Coach({ user, api }) {
           { role: "assistant", content: response.reply },
         ]);
       } else {
-        throw new Error(response?.message || "Failed to get response from Coach.");
+        throw new Error(
+          response?.message || "Failed to get response from Coach.",
+        );
       }
     } catch (err) {
-      setError(err.message || "Coach is temporarily unavailable. Please try again.");
+      setError(
+        err.message || "Coach is temporarily unavailable. Please try again.",
+      );
     } finally {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -177,7 +183,9 @@ export default function Coach({ user, api }) {
   };
 
   return (
-    <div className="page coach-page">
+    <div
+      className={`page coach-page ${hasConversation ? "has-conversation" : ""}`}
+    >
       {/* 1. Page Header */}
       <div className="coach-header-row">
         <div className="coach-header-left">
@@ -185,7 +193,8 @@ export default function Coach({ user, api }) {
           <p>Your personal FocusDay assistant</p>
         </div>
         <div className="coach-info-chip">
-          Ask about your tasks, habits, progress or get personalized suggestions.
+          Ask about your tasks, habits, progress or get personalized
+          suggestions.
         </div>
       </div>
 
@@ -269,7 +278,10 @@ export default function Coach({ user, api }) {
             </div>
           )}
 
-          <div ref={messagesEndRef} style={{ height: "1px", scrollMarginBottom: "90px" }} />
+          <div
+            ref={messagesEndRef}
+            style={{ height: "1px", scrollMarginBottom: "90px" }}
+          />
         </div>
       )}
 

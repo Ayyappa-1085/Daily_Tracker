@@ -1,10 +1,13 @@
 require('dotenv').config();
 
+const dns = require('dns');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 const app = express();
 
